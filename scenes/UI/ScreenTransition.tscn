@@ -1,0 +1,14 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ScreenTransition.gd" id="1_qp4sh"]
+
+[node name="ScreenTransition" type="CanvasLayer"]
+layer = 128
+script = ExtResource("1_qp4sh")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 1)
+mouse_filter = 2
+visible = false

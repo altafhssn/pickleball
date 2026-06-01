@@ -1,0 +1,120 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ShopController.gd" id="1_t0hse"]
+
+[node name="Shop" type="CanvasLayer"]
+script = ExtResource("1_t0hse")
+
+[node name="ShopPanel" type="Panel" parent="."]
+offset_left = 40.0
+offset_top = 60.0
+offset_right = 1040.0
+offset_bottom = 1860.0
+color = Color(0.12, 0.12, 0.16, 0.95)
+
+[node name="Title" type="Label" parent="ShopPanel"]
+offset_left = 0.0
+offset_top = 20.0
+offset_right = 1000.0
+offset_bottom = 70.0
+theme_override_font_sizes/font_size = 32
+horizontal_alignment = 1
+text = "🛒 Paddle Shop"
+
+[node name="CoinLabel" type="Label" parent="ShopPanel"]
+offset_left = 40.0
+offset_top = 85.0
+offset_right = 500.0
+offset_bottom = 125.0
+theme_override_font_sizes/font_size = 22
+text = "🪙 0"
+
+[node name="GemLabel" type="Label" parent="ShopPanel"]
+offset_left = 540.0
+offset_top = 85.0
+offset_right = 1000.0
+offset_bottom = 125.0
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 2
+text = "💎 0"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="ShopPanel"]
+offset_left = 20.0
+offset_top = 140.0
+offset_right = 640.0
+offset_bottom = 1700.0
+
+[node name="PaddleGrid" type="GridContainer" parent="ShopPanel/ScrollContainer"]
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 10
+columns = 2
+
+[node name="PaddlePreviewPanel" type="Panel" parent="ShopPanel"]
+offset_left = 660.0
+offset_top = 140.0
+offset_right = 980.0
+offset_bottom = 1700.0
+color = Color(0.18, 0.18, 0.22, 1.0)
+
+[node name="PaddlePreviewName" type="Label" parent="ShopPanel/PaddlePreviewPanel"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 300.0
+offset_bottom = 60.0
+theme_override_font_sizes/font_size = 20
+text = "Select a paddle"
+horizontal_alignment = 1
+
+[node name="PaddlePreviewStats" type="VBoxContainer" parent="ShopPanel/PaddlePreviewPanel"]
+offset_left = 20.0
+offset_top = 80.0
+offset_right = 300.0
+offset_bottom = 400.0
+theme_override_constants/separation = 12
+
+[node name="PowerLabel" type="Label" parent="ShopPanel/PaddlePreviewPanel/PaddlePreviewStats"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Power:      ███░░░░░░░ 30"
+
+[node name="ControlLabel" type="Label" parent="ShopPanel/PaddlePreviewPanel/PaddlePreviewStats"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Control:   █████░░░░░ 50"
+
+[node name="SpinLabel" type="Label" parent="ShopPanel/PaddlePreviewPanel/PaddlePreviewStats"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Spin:        ███░░░░░░░ 30"
+
+[node name="ReachLabel" type="Label" parent="ShopPanel/PaddlePreviewPanel/PaddlePreviewStats"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Reach:      ████░░░░░░ 40"
+
+[node name="BuyButton" type="Button" parent="ShopPanel"]
+offset_left = 680.0
+offset_top = 1440.0
+offset_right = 960.0
+offset_bottom = 1500.0
+theme_override_font_sizes/font_size = 18
+text = "Buy"
+visible = false
+
+[node name="EquipButton" type="Button" parent="ShopPanel"]
+offset_left = 680.0
+offset_top = 1520.0
+offset_right = 960.0
+offset_bottom = 1580.0
+theme_override_font_sizes/font_size = 18
+text = "Equip"
+visible = false
+
+[node name="BackButton" type="Button" parent="ShopPanel"]
+offset_left = 20.0
+offset_top = 1720.0
+offset_right = 200.0
+offset_bottom = 1780.0
+theme_override_font_sizes/font_size = 18
+text = "← Back"

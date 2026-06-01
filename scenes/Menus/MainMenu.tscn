@@ -1,0 +1,72 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/MainMenu.gd" id="1_ag9hv"]
+
+[node name="MainMenu" type="CanvasLayer"]
+script = ExtResource("1_ag9hv")
+
+[node name="Title" type="Label" parent="."]
+offset_left = 0.0
+offset_top = 350.0
+offset_right = 1080.0
+offset_bottom = 450.0
+theme_override_font_sizes/font_size = 64
+horizontal_alignment = 1
+text = "Pickleball Smash"
+
+[node name="Subtitle" type="Label" parent="."]
+offset_left = 0.0
+offset_top = 460.0
+offset_right = 1080.0
+offset_bottom = 510.0
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+text = "The fastest-growing sport, now in your pocket"
+
+[node name="PlayButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 620.0
+offset_right = 740.0
+offset_bottom = 690.0
+theme_override_font_sizes/font_size = 28
+text = "▶ Quick Match"
+
+[node name="PracticeButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 710.0
+offset_right = 740.0
+offset_bottom = 780.0
+theme_override_font_sizes/font_size = 28
+text = "🎾 Practice vs AI"
+
+[node name="DoublesButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 800.0
+offset_right = 740.0
+offset_bottom = 870.0
+theme_override_font_sizes/font_size = 28
+text = "👥 Doubles 2v2"
+
+[node name="TournamentButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 890.0
+offset_right = 740.0
+offset_bottom = 960.0
+theme_override_font_sizes/font_size = 28
+text = "🏆 Tournament"
+
+[node name="ChallengesButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 890.0
+offset_right = 740.0
+offset_bottom = 960.0
+theme_override_font_sizes/font_size = 28
+text = "📋 Daily Challenges"
+
+[node name="ShopButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 980.0
+offset_right = 740.0
+offset_bottom = 1050.0
+theme_override_font_sizes/font_size = 28
+text = "🛒 Shop"

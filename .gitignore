@@ -1,0 +1,22 @@
+# Godot specific ignores
+.godot/imported/
+.godot/global_script_class_cache.cfg
+.godot/uid_cache.bin
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Project ignores
+tools/
+scripts/generate_audio.py

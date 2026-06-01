@@ -1,0 +1,15 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dqmbm"]
+bg_color = Color(1, 1, 1, 0.3)
+
+[node name="PowerIndicator" type="ProgressBar"]
+offset_left = 340.0
+offset_top = 620.0
+offset_right = 740.0
+offset_bottom = 650.0
+step = 0.01
+value = 0.0
+max_value = 1.0
+modulate = Color(1, 1, 1, 0.8)
+show_percentage = false

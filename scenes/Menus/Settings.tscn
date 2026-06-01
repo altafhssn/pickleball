@@ -1,0 +1,178 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/SettingsController.gd" id="1_cx5qw"]
+
+[node name="Settings" type="CanvasLayer"]
+script = ExtResource("1_cx5qw")
+
+[node name="Overlay" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.1, 0.1, 0.15, 0.95)
+
+[node name="Title" type="Label" parent="."]
+offset_left = 0.0
+offset_top = 100.0
+offset_right = 1080.0
+offset_bottom = 180.0
+theme_override_font_sizes/font_size = 52
+horizontal_alignment = 1
+vertical_alignment = 0
+text = "Settings"
+
+[node name="MasterSlider" type="HSlider" parent="."]
+offset_left = 140.0
+offset_top = 260.0
+offset_right = 940.0
+offset_bottom = 300.0
+min_value = 0.0
+max_value = 100.0
+value = 80.0
+step = 1.0
+
+[node name="MasterLabel" type="Label" parent="."]
+offset_left = 60.0
+offset_top = 255.0
+offset_right = 240.0
+offset_bottom = 295.0
+theme_override_font_sizes/font_size = 24
+vertical_alignment = 1
+text = "Master Vol"
+
+[node name="MasterValueLabel" type="Label" parent="."]
+offset_left = 940.0
+offset_top = 255.0
+offset_right = 1020.0
+offset_bottom = 295.0
+theme_override_font_sizes/font_size = 24
+vertical_alignment = 1
+horizontal_alignment = 2
+text = "80"
+
+[node name="SFXSlider" type="HSlider" parent="."]
+offset_left = 140.0
+offset_top = 340.0
+offset_right = 940.0
+offset_bottom = 380.0
+min_value = 0.0
+max_value = 100.0
+value = 100.0
+step = 1.0
+
+[node name="SFXLabel" type="Label" parent="."]
+offset_left = 60.0
+offset_top = 335.0
+offset_right = 240.0
+offset_bottom = 375.0
+theme_override_font_sizes/font_size = 24
+vertical_alignment = 1
+text = "SFX Vol"
+
+[node name="SFXValueLabel" type="Label" parent="."]
+offset_left = 940.0
+offset_top = 335.0
+offset_right = 1020.0
+offset_bottom = 375.0
+theme_override_font_sizes/font_size = 24
+vertical_alignment = 1
+horizontal_alignment = 2
+text = "100"
+
+[node name="MusicSlider" type="HSlider" parent="."]
+offset_left = 140.0
+offset_top = 420.0
+offset_right = 940.0
+offset_bottom = 460.0
+min_value = 0.0
+max_value = 100.0
+value = 70.0
+step = 1.0
+
+[node name="MusicLabel" type="Label" parent="."]
+offset_left = 60.0
+offset_top = 415.0
+offset_right = 240.0
+offset_bottom = 455.0
+theme_override_font_sizes/font_size = 24
+vertical_alignment = 1
+text = "Music Vol"
+
+[node name="MusicValueLabel" type="Label" parent="."]
+offset_left = 940.0
+offset_top = 415.0
+offset_right = 1020.0
+offset_bottom = 455.0
+theme_override_font_sizes/font_size = 24
+vertical_alignment = 1
+horizontal_alignment = 2
+text = "70"
+
+[node name="Separator" type="HSeparator" parent="."]
+offset_left = 60.0
+offset_top = 500.0
+offset_right = 1020.0
+offset_bottom = 510.0
+
+[node name="ResetButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 540.0
+offset_right = 740.0
+offset_bottom = 600.0
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
+text = "⚠ Reset Progress"
+
+[node name="ControlsLabel" type="Label" parent="."]
+offset_left = 100.0
+offset_top = 640.0
+offset_right = 980.0
+offset_bottom = 1300.0
+theme_override_font_sizes/font_size = 18
+theme_override_colors/font_color = Color(0.8, 0.8, 0.85, 1)
+horizontal_alignment = 0
+vertical_alignment = 0
+autowrap_mode = 1
+text = ""
+
+[node name="BackButton" type="Button" parent="."]
+offset_left = 340.0
+offset_top = 1350.0
+offset_right = 740.0
+offset_bottom = 1420.0
+theme_override_font_sizes/font_size = 28
+text = "← Back"
+
+[node name="ConfirmPanel" type="Panel" parent="."]
+visible = false
+anchor_left = 0.2
+anchor_top = 0.35
+anchor_right = 0.8
+anchor_bottom = 0.55
+color = Color(0.15, 0.12, 0.12, 0.95)
+
+[node name="ConfirmLabel" type="Label" parent="ConfirmPanel"]
+anchor_left = 0.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.5
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+vertical_alignment = 2
+text = "Reset ALL progress?\nThis cannot be undone!"
+
+[node name="YesButton" type="Button" parent="ConfirmPanel"]
+anchor_left = 0.1
+anchor_top = 0.55
+anchor_right = 0.45
+anchor_bottom = 0.9
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
+text = "Yes, Reset"
+
+[node name="NoButton" type="Button" parent="ConfirmPanel"]
+anchor_left = 0.55
+anchor_top = 0.55
+anchor_right = 0.9
+anchor_bottom = 0.9
+theme_override_font_sizes/font_size = 22
+text = "Cancel"

@@ -1,0 +1,125 @@
+[gd_scene load_steps=21 format=3]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_fmb0u"]
+size = Vector3(2.0, 0.05, 3.0)
+
+[sub_resource type="BoxMesh" id="BoxMesh_3cx0g"]
+size = Vector3(2.0, 0.05, 3.0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_c3kl0"]
+albedo_color = Color(0.1, 0.45, 0.35, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_n2q2d"]
+albedo_color = Color(1, 1, 1, 1)
+emission_enabled = true
+emission = Color(1, 1, 1, 1)
+emission_energy_multiplier = 0.05
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_qw3e5"]
+size = Vector3(2.08, 0.16, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_g1af5"]
+size = Vector3(2.08, 0.16, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_6fa23"]
+size = Vector3(2.08, 0.02, 0.025)
+
+[sub_resource type="BoxMesh" id="BoxMesh_f3sd1"]
+size = Vector3(0.02, 0.005, 3.0)
+
+[sub_resource type="BoxMesh" id="BoxMesh_d4gh2"]
+size = Vector3(2.0, 0.005, 0.02)
+
+[sub_resource type="BoxMesh" id="BoxMesh_h5jk3"]
+size = Vector3(0.02, 0.005, 1.02)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_netmat"]
+albedo_color = Color(0.95, 0.95, 0.95, 0.8)
+transparency = 1
+
+[sub_resource type="Environment" id="Environment_1e7qf"]
+ambient_light_color = Color(0.4, 0.4, 0.5, 1)
+tonemap_mode = 0
+background_mode = 2
+background_color = Color(0.12, 0.12, 0.18, 1)
+
+[node name="Court" type="Node3D"]
+
+[node name="Floor" type="StaticBody3D" parent="."]
+groups = ["court_floor"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_fmb0u")
+
+[node name="FloorMesh" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_3cx0g")
+surface_material_override/0 = SubResource("StandardMaterial3D_c3kl0")
+position = Vector3(0, -0.025, 0)
+
+[node name="LineMarkings" type="Node3D" parent="."]
+
+[node name="SidelineLeft" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_f3sd1")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(-1.0, 0.001, 0)
+
+[node name="SidelineRight" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_f3sd1")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(1.0, 0.001, 0)
+
+[node name="BaselineFront" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_d4gh2")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(0, 0.001, -1.5)
+
+[node name="BaselineBack" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_d4gh2")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(0, 0.001, 1.5)
+
+[node name="KitchenLineFront" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_d4gh2")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(0, 0.001, -0.48)
+
+[node name="KitchenLineBack" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_d4gh2")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(0, 0.001, 0.48)
+
+[node name="CenterLineFront" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_h5jk3")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(0, 0.001, -0.99)
+
+[node name="CenterLineBack" type="MeshInstance3D" parent="LineMarkings"]
+mesh = SubResource("BoxMesh_h5jk3")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(0, 0.001, 0.99)
+
+[node name="Net" type="StaticBody3D" parent="."]
+groups = ["net"]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Net"]
+shape = SubResource("BoxShape3D_qw3e5")
+
+[node name="NetMesh" type="MeshInstance3D" parent="Net"]
+mesh = SubResource("BoxMesh_g1af5")
+surface_material_override/0 = SubResource("StandardMaterial3D_netmat")
+position = Vector3(0, 0.08, 0)
+
+[node name="NetTopBand" type="MeshInstance3D" parent="Net"]
+mesh = SubResource("BoxMesh_6fa23")
+surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
+position = Vector3(0, 0.16, 0)
+
+[node name="DirectionalLight" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.85, 0.5, 0)
+light_color = Color(1, 0.97, 0.92, 1)
+light_energy = 1.2
+shadow_enabled = true
+shadow_bias = 0.01
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1e7qf")

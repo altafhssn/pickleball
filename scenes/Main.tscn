@@ -1,0 +1,66 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://scripts/Main.gd" id="0_main"]
+[ext_resource type="Script" path="res://scripts/GameState.gd" id="1_gknvs"]
+[ext_resource type="Script" path="res://scripts/MatchManager.gd" id="2_pnlmg"]
+[ext_resource type="Script" path="res://scripts/InputHandler.gd" id="3_12ww4"]
+[ext_resource type="Script" path="res://scripts/AIManager.gd" id="4_5dsf8"]
+[ext_resource type="PackedScene" path="res://scenes/Gameplay/Court.tscn" id="5_ibf4i"]
+[ext_resource type="PackedScene" path="res://scenes/Gameplay/Player.tscn" id="6_a04kf"]
+[ext_resource type="PackedScene" path="res://scenes/Gameplay/Ball.tscn" id="7_w3prp"]
+[ext_resource type="PackedScene" path="res://scenes/Gameplay/UI/HUD.tscn" id="8_ws3qp"]
+[ext_resource type="Script" path="res://scripts/GameFeel.gd" id="9_abcde"]
+[ext_resource type="Script" path="res://scripts/DoublesManager.gd" id="10_double"]
+[ext_resource type="PackedScene" path="res://scenes/Gameplay/PlayerPartner.tscn" id="11_partner"]
+[ext_resource type="Script" path="res://scripts/TournamentManager.gd" id="12_tourney"]
+[ext_resource type="Script" path="res://scripts/ChallengeManager.gd" id="13_challenge"]
+
+[node name="Main" type="Node"]
+script = ExtResource("0_main")
+
+[node name="GameState" type="Node" parent="."]
+script = ExtResource("1_gknvs")
+
+[node name="MatchManager" type="Node" parent="."]
+script = ExtResource("2_pnlmg")
+
+[node name="InputHandler" type="Node" parent="."]
+script = ExtResource("3_12ww4")
+
+[node name="AIManager" type="Node" parent="."]
+script = ExtResource("4_5dsf8")
+
+[node name="DoublesManager" type="Node" parent="."]
+script = ExtResource("10_double")
+
+[node name="TournamentManager" type="Node" parent="."]
+script = ExtResource("12_tourney")
+
+[node name="ChallengeManager" type="Node" parent="."]
+script = ExtResource("13_challenge")
+
+[node name="GameFeel" type="Node" parent="."]
+script = ExtResource("9_abcde")
+
+[node name="Court" parent="." instance=ExtResource("5_ibf4i")]
+
+[node name="Player" parent="." instance=ExtResource("6_a04kf")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0, -0.8)
+
+[node name="PlayerPartner" parent="." instance=ExtResource("11_partner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0, -0.8)
+
+[node name="Opponent" parent="." instance=ExtResource("6_a04kf")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0, 0.8)
+
+[node name="OpponentPartner" parent="." instance=ExtResource("11_partner")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5, 0, 0.8)
+
+[node name="Ball" parent="." instance=ExtResource("7_w3prp")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.05, 0)
+
+[node name="HUD" parent="." instance=ExtResource("8_ws3qp")]
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.866025, -0.224144, 0.447214, 0, 0.894427, 0.447214, -0.5, -0.387298, 0.774597, 0, 1.5, 2.5)
+current = true
