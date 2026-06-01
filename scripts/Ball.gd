@@ -51,17 +51,14 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	var speed: float = velocity.length()
 
 	# Rest-stop: ball nearly motionless near the floor → kill velocity so it
-	# doesn't dribble forever after a soft bounce. Fire one synthetic bounce
-	# event so Main's rally end-condition can count "dead ball" as a miss.
+	# doesn't dribble forever after a soft bounce. The rally end-condition
+	# (Main._check_ball_stuck) will end the point after BALL_REST_TIMEOUT.
+	# We deliberately don't emit a synthetic bounce here — that previously
+	# triggered the AI to apply a fresh velocity to a stationary ball, which
+	# looked like a teleport.
 	if speed < rest_speed_threshold and state.transform.origin.y <= rest_height_threshold:
 		state.linear_velocity = Vector3.ZERO
 		state.angular_velocity = Vector3.ZERO
-		if not rest_fired:
-			rest_fired = true
-			var pos: Vector3 = state.transform.origin
-			var side: int = 0 if pos.z < 0 else 1
-			ball_landed.emit(pos, side)
-			EventBus.ball_bounced.emit(pos, side)
 		return
 
 	if speed < 0.05:
