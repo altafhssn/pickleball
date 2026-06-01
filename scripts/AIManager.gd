@@ -123,8 +123,11 @@ func _make_decision() -> void:
 		_:
 			_drive_shot()
 	
-	# 5. Add random variation (10-15% non-optimal for realism)
-	if randf() < 0.12:
+	# 5. Random variation — low-strategy AIs make more "non-optimal" choices
+	# so BEGINNER feels spray-prone and CHAMPION feels disciplined.
+	var strategy: float = config.get("strategic_depth", 0.5)
+	var variation_chance: float = lerpf(0.35, 0.05, strategy)
+	if randf() < variation_chance:
 		_apply_random_variation()
 
 func _can_reach_ball() -> bool:
@@ -156,34 +159,48 @@ func _dink_shot() -> void:
 	var config = DIFFICULTY_CONFIG[difficulty]
 	var accuracy: float = config["shot_accuracy"]
 	var direction: Vector3 = _get_aimed_direction(accuracy, 1.0 - accuracy)
-	EventBus.ai_shot_selected.emit(SHOT_TYPE.ShotType.DINK, direction, 0.5)
+	ai_shot_selected.emit(SHOT_TYPE.ShotType.DINK, direction, 0.5)
 
 func _lob_shot() -> void:
 	var config = DIFFICULTY_CONFIG[difficulty]
 	var direction: Vector3 = _get_aimed_direction(config["shot_accuracy"], 0.3)
-	EventBus.ai_shot_selected.emit(SHOT_TYPE.ShotType.LOB, direction, 0.7 + randf() * 0.3)
+	ai_shot_selected.emit(SHOT_TYPE.ShotType.LOB, direction, 0.7 + randf() * 0.3)
 
 func _drive_shot() -> void:
 	var direction: Vector3 = _get_aimed_direction(0.8, 0.2)
-	EventBus.ai_shot_selected.emit(SHOT_TYPE.ShotType.DRIVE, direction, 0.6 + randf() * 0.4)
+	ai_shot_selected.emit(SHOT_TYPE.ShotType.DRIVE, direction, 0.6 + randf() * 0.4)
 
 func _drive_cross_court() -> void:
-	var side: float = 1.0 if randf() > 0.5 else -1.0
-	var direction: Vector3 = Vector3(side, 0.0, -0.8).normalized()
-	EventBus.ai_shot_selected.emit(SHOT_TYPE.ShotType.DRIVE, direction, 0.7 + randf() * 0.3)
+	# Bias the cross-court target away from the human player when strategy is high.
+	var config = DIFFICULTY_CONFIG[difficulty]
+	var strategy: float = config.get("strategic_depth", 0.5)
+	var away_side: float = -signf(opponent_position.x) if absf(opponent_position.x) > 0.05 else (1.0 if randf() > 0.5 else -1.0)
+	var random_side: float = 1.0 if randf() > 0.5 else -1.0
+	var side: float = away_side if randf() < strategy else random_side
+	var direction: Vector3 = Vector3(side * 0.6, 0.0, -0.8).normalized()
+	ai_shot_selected.emit(SHOT_TYPE.ShotType.DRIVE, direction, 0.7 + randf() * 0.3)
 
 func _make_desperate_return() -> void:
 	var direction: Vector3 = Vector3(randf_range(-0.3, 0.3), 0.5, -1.0).normalized()
-	EventBus.ai_shot_selected.emit(SHOT_TYPE.ShotType.DRIVE, direction, 0.3)
+	ai_shot_selected.emit(SHOT_TYPE.ShotType.DRIVE, direction, 0.3)
 
 func _get_aimed_direction(accuracy: float, spread: float) -> Vector3:
-	var target_side: float = randf_range(-spread, spread)
-	var target_z: float = -1.0  # Toward opponent
-	
+	# Strategic aim: target the side of the court the player is NOT on.
+	# At strategy=0 we ignore the player and spray randomly within `spread`;
+	# at strategy=1 we aim sharply away from the player's current x.
+	var config = DIFFICULTY_CONFIG[difficulty]
+	var strategy: float = config.get("strategic_depth", 0.5)
+
+	# Far-side target relative to the player; clamp to a sensible court band.
+	var away_x: float = clampf(-opponent_position.x * 1.5, -0.4, 0.4)
+	var random_x: float = randf_range(-spread, spread)
+	var target_side: float = lerpf(random_x, away_x, strategy)
+
+	# Inaccuracy: random offset if the accuracy roll fails.
 	if randf() > accuracy:
 		target_side += randf_range(-0.3, 0.3)
-	
-	return Vector3(target_side, 0.0, target_z).normalized()
+
+	return Vector3(target_side, 0.0, -1.0).normalized()
 
 func _apply_random_variation() -> void:
 	# 10-15% chance to do something unexpected

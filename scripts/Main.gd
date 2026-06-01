@@ -243,39 +243,60 @@ func _update_player_auto_move(delta: float) -> void:
 	var opp_target_z = OPPONENT_BASELINE
 	var player_target_x = 0.0
 	var opp_target_x = 0.0
-	
+
 	if ball.is_in_play:
+		# Predict where the ball will land (or current position if already low).
+		var landing: Vector3 = _predict_ball_landing()
+
 		if ball.position.z < 0:
 			# Ball on player's side
 			if is_doubles:
-				# Player covers left half (x < 0), partner covers right half (x > 0)
 				if ball.position.x < 0:
 					player_target_z = clampf(ball.position.z + 0.1, -0.9, -0.1)
 					player_target_x = clampf(ball.position.x, -0.5, 0.0)
 				else:
-					# Ball on partner's side — stay in position
 					player_target_z = PLAYER_BASELINE
 					player_target_x = PLAYER_LEFT
 			else:
 				player_target_z = clampf(ball.position.z + 0.1, -0.9, -0.1)
-			# Opponent side auto-move (singles)
+			# Singles opponent: drift back toward kitchen line while ball is on player side.
 			if not is_doubles:
-				opp_target_z = clampf(ball.position.z - 0.1, 0.1, 0.9)
+				opp_target_z = 0.25
+				opp_target_x = move_toward(opponent.position.x, 0.0, delta * 1.5)
 		else:
-			# Ball on opponent's side
+			# Ball on opponent's side — singles opponent moves to predicted landing.
 			if not is_doubles:
-				opp_target_z = clampf(ball.position.z - 0.1, 0.1, 0.9)
-		
-		# Opponent partner covers left opponent side in doubles
+				var lz: float = landing.z if landing.z > 0.05 else ball.position.z
+				var lx: float = landing.x if landing.z > 0.05 else ball.position.x
+				opp_target_z = clampf(lz + 0.08, 0.1, 0.9)
+				opp_target_x = clampf(lx, -0.4, 0.4)
+
 		if is_doubles and ball.position.z > 0:
 			if ball.position.x < 0:
 				opp_target_z = clampf(ball.position.z - 0.1, 0.1, 0.9)
-	
+
 	player.position.x = move_toward(player.position.x, player_target_x if is_doubles else 0.0, delta * 2.0)
 	player.position.z = move_toward(player.position.z, player_target_z, delta * 2.0)
-	
+
 	if not is_doubles:
+		opponent.position.x = move_toward(opponent.position.x, opp_target_x, delta * 2.0)
 		opponent.position.z = move_toward(opponent.position.z, opp_target_z, delta * 2.0)
+
+# Ballistic projection ignoring drag — close enough for AI positioning.
+# Solves y(t) = pos.y + vel.y*t - 0.5*g*t² = 0 for t > 0.
+func _predict_ball_landing() -> Vector3:
+	var pos: Vector3 = ball.position
+	var vel: Vector3 = ball.linear_velocity
+	if vel.length_squared() < 0.01:
+		return pos
+	var g: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
+	var disc: float = vel.y * vel.y + 2.0 * g * maxf(pos.y, 0.0)
+	if disc <= 0.0:
+		return pos
+	var t: float = (vel.y + sqrt(disc)) / g
+	if t <= 0.0:
+		return pos
+	return Vector3(pos.x + vel.x * t, 0.0, pos.z + vel.z * t)
 
 func _update_camera() -> void:
 	var target_z = ball.position.z * 0.3
