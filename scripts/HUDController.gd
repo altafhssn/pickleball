@@ -11,20 +11,13 @@ extends CanvasLayer
 var message_timer: float = 0.0
 
 func _ready():
-	score_label.text = "0 - 0"
+	score_label.text = "0  –  0"
 	serve_label.text = ""
-	gesture_guide.text = ""
 	message_label.text = ""
 	power_bar.visible = false
 	power_bar.value = 0.0
 	power_bar.max_value = 1.0
-	
-	if message_label:
-		message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		message_label.position = Vector2(0, 960)  # Center of 1080x1920
-		message_label.size = Vector2(1080, 60)
-		message_label.add_theme_font_size_override("font_size", 36)
+	# Layout/typography is owned by HUD.tscn — don't override at runtime.
 
 func _process(delta: float) -> void:
 	if message_timer > 0:
@@ -33,14 +26,14 @@ func _process(delta: float) -> void:
 			message_label.text = ""
 
 func update_score(player_score: int, opponent_score: int) -> void:
-	score_label.text = str(player_score) + " - " + str(opponent_score)
+	score_label.text = "%d  –  %d" % [player_score, opponent_score]
 
 func show_serve_indicator(text: String) -> void:
 	serve_label.text = text
 
 func show_gesture_guide(visible_flag: bool) -> void:
 	if visible_flag:
-		gesture_guide.text = "⬆ Lob  ⬇ Dink  ⬅➡ Cross  ⚡ Tap Volley"
+		gesture_guide.text = "Swipe ⬆ Lob   ⬇ Dink   ⬅ ➡ Cross   Tap Volley\nDesktop: Space serve · WASD shots · V volley · P power"
 	else:
 		gesture_guide.text = ""
 
