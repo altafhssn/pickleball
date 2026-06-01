@@ -55,6 +55,9 @@ const OPPONENT_BASELINE: float = 0.8
 # Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
 var camera_base_pos: Vector3 = Vector3.ZERO
 
+# Landing marker — a flat ring on the court showing where the ball will bounce.
+var landing_marker: MeshInstance3D = null
+
 # Rally end-condition tracking
 var bounces_since_last_hit: int = 0
 # Used to enforce the two-bounce rule (until 2 total bounces, every hit must
@@ -97,6 +100,9 @@ func _ready():
 
 	# Team coloring so the player can tell themselves apart from the AI.
 	_apply_team_colors()
+
+	# Spawn the landing marker (hidden until first serve).
+	_spawn_landing_marker()
 	
 	# Connect hit VFX
 	EventBus.ball_hit.connect(_spawn_hit_vfx)
@@ -231,6 +237,39 @@ func _start_practice_match() -> void:
 const PLAYER_TEAM_COLOR := Color(0.25, 0.55, 1.0)   # Blue — that's you.
 const OPPONENT_TEAM_COLOR := Color(1.0, 0.45, 0.15)  # Orange — the AI.
 
+func _spawn_landing_marker() -> void:
+	landing_marker = MeshInstance3D.new()
+	var torus: TorusMesh = TorusMesh.new()
+	torus.inner_radius = 0.06
+	torus.outer_radius = 0.10
+	torus.rings = 24
+	torus.ring_segments = 8
+	landing_marker.mesh = torus
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = Color(1.0, 0.55, 0.1, 0.9)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.55, 0.1)
+	mat.emission_energy_multiplier = 0.6
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	landing_marker.material_override = mat
+	landing_marker.visible = false
+	add_child(landing_marker)
+
+func _update_landing_marker() -> void:
+	if landing_marker == null:
+		return
+	if not ball.is_in_play or ball.linear_velocity.length() < 0.5:
+		landing_marker.visible = false
+		return
+	var landing: Vector3 = _predict_ball_landing()
+	# Only show if landing is plausibly on the court.
+	if absf(landing.x) > 1.3 or absf(landing.z) > 1.8:
+		landing_marker.visible = false
+		return
+	landing_marker.visible = true
+	landing_marker.global_position = Vector3(landing.x, 0.012, landing.z)
+
 func _announce_shot(shot_type: int) -> void:
 	var name: String = ""
 	match shot_type:
@@ -295,6 +334,7 @@ func _process(delta: float) -> void:
 	_update_camera()
 	_check_ball_out_of_bounds()
 	_update_turn_indicator()
+	_update_landing_marker()
 
 	# Make characters look toward the ball each frame
 	_update_characters_look_at_ball()
@@ -319,38 +359,43 @@ func _update_player_auto_move(delta: float) -> void:
 		# just outside the kitchen line, so the auto-mover never parks the
 		# player inside the no-volley zone.
 		if ball.position.z < 0:
-			# Ball on player's side
+			# Ball on player's side — move to predicted landing if available.
+			var plx: float = landing.x if landing.z < -0.05 else ball.position.x
+			var plz: float = landing.z if landing.z < -0.05 else ball.position.z
 			if is_doubles:
 				if ball.position.x < 0:
-					player_target_z = clampf(ball.position.z + 0.1, -1.3, -0.55)
-					player_target_x = clampf(ball.position.x, -0.5, 0.0)
+					player_target_z = clampf(plz + 0.1, -1.3, -0.55)
+					player_target_x = clampf(plx, -0.5, 0.0)
 				else:
 					player_target_z = PLAYER_BASELINE
 					player_target_x = PLAYER_LEFT
 			else:
-				player_target_z = clampf(ball.position.z + 0.1, -1.3, -0.55)
-			# Singles opponent: hold the kitchen line while ball is on player side.
+				player_target_z = clampf(plz + 0.1, -1.3, -0.55)
+				player_target_x = clampf(plx, -0.4, 0.4)
+			# Singles opponent: hold the kitchen line, tracking ball laterally.
 			if not is_doubles:
 				opp_target_z = 0.55
-				opp_target_x = move_toward(opponent.position.x, 0.0, delta * 1.5)
+				opp_target_x = clampf(ball.position.x * 0.5, -0.4, 0.4)
 		else:
-			# Ball on opponent's side — singles opponent moves to predicted landing.
+			# Ball on opponent's side — opponent moves to predicted landing,
+			# player drifts laterally to track the ball for visibility.
 			if not is_doubles:
 				var lz: float = landing.z if landing.z > 0.05 else ball.position.z
 				var lx: float = landing.x if landing.z > 0.05 else ball.position.x
 				opp_target_z = clampf(lz + 0.08, 0.55, 1.3)
 				opp_target_x = clampf(lx, -0.4, 0.4)
+				# Player tracks ball.x while waiting for the ball to come back.
+				player_target_x = clampf(ball.position.x * 0.4, -0.3, 0.3)
+				player_target_z = -1.0  # Shift back to baseline-ish
 
 		if is_doubles and ball.position.z > 0:
 			if ball.position.x < 0:
 				opp_target_z = clampf(ball.position.z - 0.1, 0.55, 1.3)
 
-	# Bumped move rate — ball travels at 3–6 units/sec, characters need to
-	# keep up or the AI looks like it's standing still while the ball flies
-	# past. Real pickleball is fast; characters being slightly faster than
-	# the ball isn't unrealistic at this scale.
+	# Move rate per second. Characters need to keep visible pace with the
+	# ball (which travels 3–6 units/sec) so the user can read what's happening.
 	var move_rate: float = delta * 4.0
-	player.position.x = move_toward(player.position.x, player_target_x if is_doubles else 0.0, move_rate)
+	player.position.x = move_toward(player.position.x, player_target_x, move_rate)
 	player.position.z = move_toward(player.position.z, player_target_z, move_rate)
 
 	if not is_doubles:
