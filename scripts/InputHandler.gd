@@ -40,27 +40,8 @@ func _input(event: InputEvent) -> void:
 		_handle_touch_event(event)
 	elif event is InputEventScreenDrag:
 		_handle_drag_event(event)
-	elif event is InputEventKey and event.pressed and not event.echo:
-		_handle_key(event)
-
-# Desktop keyboard fallback for *rally* shots only.
-# Serve input (Space hold + arrow-key aim) is handled directly in Main.gd
-# during SERVE_WAIT so we don't accidentally instant-serve on Space press.
-func _handle_key(event: InputEventKey) -> void:
-	var center: Vector2 = Vector2(540, 960)
-	match event.keycode:
-		KEY_W:
-			EventBus.swipe_detected.emit(Vector2(0, -200), 200.0)  # lob
-		KEY_S:
-			EventBus.swipe_detected.emit(Vector2(0, 200), 200.0)   # dink
-		KEY_A:
-			EventBus.swipe_detected.emit(Vector2(-200, 0), 200.0)  # cross-court left
-		KEY_D:
-			EventBus.swipe_detected.emit(Vector2(200, 0), 200.0)   # cross-court right
-		KEY_V:
-			EventBus.tap_detected.emit(center)                     # volley
-		KEY_P:
-			EventBus.double_tap_detected.emit(center)              # power charge
+	# Keyboard input is owned by Main.gd (it polls WASD/arrows/Space and
+	# decides per-state whether they aim, charge, or trigger shots).
 
 func _handle_touch_event(event: InputEventScreenTouch) -> void:
 	if event.pressed:

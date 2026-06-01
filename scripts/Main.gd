@@ -60,6 +60,13 @@ var serve_aim_z: float = 0.7   # default deep on opponent's side, past kitchen
 var serve_charging: bool = false
 var serve_charge: float = 0.0
 var was_space_pressed: bool = false
+# Edge-detect rally shot keys so a held key doesn't spam ball.hit().
+var was_w_pressed: bool = false
+var was_a_pressed: bool = false
+var was_s_pressed: bool = false
+var was_d_pressed: bool = false
+var was_v_pressed: bool = false
+var was_p_pressed: bool = false
 const SERVE_AIM_X_MIN: float = -0.9
 const SERVE_AIM_X_MAX: float = 0.9
 const SERVE_AIM_Z_MIN: float = 0.55  # must clear the kitchen line
@@ -262,15 +269,15 @@ func _process_serve_input(delta: float) -> void:
 		was_space_pressed = false
 		return
 
-	# Arrow keys adjust the serve aim — orange landing marker follows.
+	# WASD *and* arrow keys adjust the serve aim — orange landing marker follows.
 	var step: float = SERVE_AIM_SPEED * delta
-	if Input.is_key_pressed(KEY_LEFT):
+	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
 		serve_aim_x = clampf(serve_aim_x - step, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
-	if Input.is_key_pressed(KEY_RIGHT):
+	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
 		serve_aim_x = clampf(serve_aim_x + step, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
-	if Input.is_key_pressed(KEY_UP):
+	if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
 		serve_aim_z = clampf(serve_aim_z + step, SERVE_AIM_Z_MIN, SERVE_AIM_Z_MAX)
-	if Input.is_key_pressed(KEY_DOWN):
+	if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
 		serve_aim_z = clampf(serve_aim_z - step, SERVE_AIM_Z_MIN, SERVE_AIM_Z_MAX)
 
 	# Preview the aim on the landing marker.
@@ -294,6 +301,39 @@ func _process_serve_input(delta: float) -> void:
 		_launch_player_serve(power)
 
 	was_space_pressed = space_now
+
+func _process_rally_input() -> void:
+	# Rally-shot keys are only meaningful during PLAY when the ball is on
+	# the player's side. WASD pick shot type; V volleys; P starts power.
+	# Edge-detected so a held key only fires once.
+	var w_now = Input.is_key_pressed(KEY_W)
+	var a_now = Input.is_key_pressed(KEY_A)
+	var s_now = Input.is_key_pressed(KEY_S)
+	var d_now = Input.is_key_pressed(KEY_D)
+	var v_now = Input.is_key_pressed(KEY_V)
+	var p_now = Input.is_key_pressed(KEY_P)
+
+	# Only act on key-down edges during rally (and only if player can hit).
+	if rally_active and ball.position.z < 0 and ball.is_in_play:
+		if w_now and not was_w_pressed:
+			EventBus.swipe_detected.emit(Vector2(0, -200), 200.0)   # lob
+		if s_now and not was_s_pressed:
+			EventBus.swipe_detected.emit(Vector2(0, 200), 200.0)    # dink
+		if a_now and not was_a_pressed:
+			EventBus.swipe_detected.emit(Vector2(-200, 0), 200.0)   # cross-court L
+		if d_now and not was_d_pressed:
+			EventBus.swipe_detected.emit(Vector2(200, 0), 200.0)    # cross-court R
+		if v_now and not was_v_pressed:
+			EventBus.tap_detected.emit(Vector2(540, 960))           # volley
+		if p_now and not was_p_pressed:
+			EventBus.double_tap_detected.emit(Vector2(540, 960))    # power start
+
+	was_w_pressed = w_now
+	was_a_pressed = a_now
+	was_s_pressed = s_now
+	was_d_pressed = d_now
+	was_v_pressed = v_now
+	was_p_pressed = p_now
 
 func _launch_player_serve(power: float) -> void:
 	if not player_serve_ready:
@@ -412,6 +452,7 @@ func _process(delta: float) -> void:
 	_update_turn_indicator()
 	_update_landing_marker()
 	_process_serve_input(delta)
+	_process_rally_input()
 
 	# Make characters look toward the ball each frame
 	_update_characters_look_at_ball()
