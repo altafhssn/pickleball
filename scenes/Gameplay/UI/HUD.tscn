@@ -80,8 +80,8 @@ theme_override_colors/font_color = Color(1, 1, 1, 0.75)
 theme_override_font_sizes/font_size = 28
 horizontal_alignment = 1
 vertical_alignment = 1
-text = "Swipe ⬆ Lob   ⬇ Dink   ⬅ ➡ Cross   Tap Volley
-Desktop: Space serve · WASD shots · V volley · P power"
+text = "Serve: arrows aim · hold Space (release to launch)
+Rally: W Lob · S Dink · A/D Cross · V Volley · P Power"
 autowrap_mode = 2
 
 [node name="PowerIndicator" type="ProgressBar" parent="."]

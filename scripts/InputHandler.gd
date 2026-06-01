@@ -43,18 +43,19 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed and not event.echo:
 		_handle_key(event)
 
-# Desktop keyboard fallback so the game is playable without a touchscreen.
-# Synthesizes the same swipe_detected / tap_detected events the touch path emits.
+# Desktop keyboard fallback for *rally* shots only.
+# Serve input (Space hold + arrow-key aim) is handled directly in Main.gd
+# during SERVE_WAIT so we don't accidentally instant-serve on Space press.
 func _handle_key(event: InputEventKey) -> void:
 	var center: Vector2 = Vector2(540, 960)
 	match event.keycode:
-		KEY_SPACE, KEY_UP, KEY_W:
-			EventBus.swipe_detected.emit(Vector2(0, -200), 200.0)  # serve / lob
-		KEY_DOWN, KEY_S:
+		KEY_W:
+			EventBus.swipe_detected.emit(Vector2(0, -200), 200.0)  # lob
+		KEY_S:
 			EventBus.swipe_detected.emit(Vector2(0, 200), 200.0)   # dink
-		KEY_LEFT, KEY_A:
+		KEY_A:
 			EventBus.swipe_detected.emit(Vector2(-200, 0), 200.0)  # cross-court left
-		KEY_RIGHT, KEY_D:
+		KEY_D:
 			EventBus.swipe_detected.emit(Vector2(200, 0), 200.0)   # cross-court right
 		KEY_V:
 			EventBus.tap_detected.emit(center)                     # volley

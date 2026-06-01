@@ -49,8 +49,22 @@ const PADDLE_SWING_DURATION: float = 0.2
 # Doubles positions
 const PLAYER_LEFT: float = -0.5
 const PLAYER_RIGHT: float = 0.5
-const PLAYER_BASELINE: float = -0.8
-const OPPONENT_BASELINE: float = 0.8
+# Real baselines — players stand just inside the back baseline (z = ±1.5).
+const PLAYER_BASELINE: float = -1.3
+const OPPONENT_BASELINE: float = 1.3
+
+# Serve aim state — player can move the target around using arrow keys
+# before launching, and hold Space to charge power.
+var serve_aim_x: float = 0.0
+var serve_aim_z: float = 0.7   # default deep on opponent's side, past kitchen
+var serve_charging: bool = false
+var serve_charge: float = 0.0
+var was_space_pressed: bool = false
+const SERVE_AIM_X_MIN: float = -0.9
+const SERVE_AIM_X_MAX: float = 0.9
+const SERVE_AIM_Z_MIN: float = 0.55  # must clear the kitchen line
+const SERVE_AIM_Z_MAX: float = 1.4
+const SERVE_AIM_SPEED: float = 1.2   # units/sec while holding arrow keys
 
 # Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
 var camera_base_pos: Vector3 = Vector3.ZERO
@@ -237,6 +251,68 @@ func _start_practice_match() -> void:
 const PLAYER_TEAM_COLOR := Color(0.25, 0.55, 1.0)   # Blue — that's you.
 const OPPONENT_TEAM_COLOR := Color(1.0, 0.45, 0.15)  # Orange — the AI.
 
+func _process_serve_input(delta: float) -> void:
+	# Only active while the player is the server and ball isn't yet launched.
+	if not (game_state.can_serve() and is_player_serving and player_serve_ready):
+		# Clear power meter if we wander out of serve mode mid-charge.
+		if serve_charging:
+			serve_charging = false
+			serve_charge = 0.0
+			hud.show_power_meter(false)
+		was_space_pressed = false
+		return
+
+	# Arrow keys adjust the serve aim — orange landing marker follows.
+	var step: float = SERVE_AIM_SPEED * delta
+	if Input.is_key_pressed(KEY_LEFT):
+		serve_aim_x = clampf(serve_aim_x - step, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
+	if Input.is_key_pressed(KEY_RIGHT):
+		serve_aim_x = clampf(serve_aim_x + step, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
+	if Input.is_key_pressed(KEY_UP):
+		serve_aim_z = clampf(serve_aim_z + step, SERVE_AIM_Z_MIN, SERVE_AIM_Z_MAX)
+	if Input.is_key_pressed(KEY_DOWN):
+		serve_aim_z = clampf(serve_aim_z - step, SERVE_AIM_Z_MIN, SERVE_AIM_Z_MAX)
+
+	# Preview the aim on the landing marker.
+	if landing_marker:
+		landing_marker.visible = true
+		landing_marker.global_position = Vector3(serve_aim_x, 0.012, serve_aim_z)
+
+	# Space hold = charge, release = launch at charged power.
+	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
+	if space_now:
+		serve_charging = true
+		serve_charge = minf(serve_charge + delta * 0.8, 1.0)
+		hud.show_power_meter(true)
+		hud.set_power_charge(serve_charge)
+	elif was_space_pressed and serve_charging:
+		# Just released — fire the serve.
+		serve_charging = false
+		hud.show_power_meter(false)
+		var power: float = clampf(0.5 + serve_charge * 0.5, 0.5, 1.0)
+		serve_charge = 0.0
+		_launch_player_serve(power)
+
+	was_space_pressed = space_now
+
+func _launch_player_serve(power: float) -> void:
+	if not player_serve_ready:
+		return
+	player_serve_ready = false
+	game_state.transition_to(GameStateRef.State.SERVE_ACTIVE)
+
+	var target := Vector3(serve_aim_x, 0, serve_aim_z)
+	ball.serve(ball.position, target, power)
+	ball.last_hitter_id = 0
+
+	EventBus.ball_served.emit(ball.position, target)
+	EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, power)
+
+	rally_active = true
+	game_state.transition_to(GameStateRef.State.PLAY)
+	hud.show_serve_indicator("")
+	hud.show_gesture_guide(true)
+
 func _spawn_landing_marker() -> void:
 	landing_marker = MeshInstance3D.new()
 	var torus: TorusMesh = TorusMesh.new()
@@ -335,6 +411,7 @@ func _process(delta: float) -> void:
 	_check_ball_out_of_bounds()
 	_update_turn_indicator()
 	_update_landing_marker()
+	_process_serve_input(delta)
 
 	# Make characters look toward the ball each frame
 	_update_characters_look_at_ball()
@@ -394,7 +471,7 @@ func _update_player_auto_move(delta: float) -> void:
 
 	# Move rate per second. Characters need to keep visible pace with the
 	# ball (which travels 3–6 units/sec) so the user can read what's happening.
-	var move_rate: float = delta * 4.0
+	var move_rate: float = delta * 5.0
 	player.position.x = move_toward(player.position.x, player_target_x, move_rate)
 	player.position.z = move_toward(player.position.z, player_target_z, move_rate)
 
@@ -530,9 +607,14 @@ func _on_serve_ready(server_id: int, _side: int) -> void:
 	
 	if is_player_serving:
 		player_serve_ready = true
-		hud.show_serve_indicator("Your serve — Swipe up (or press Space)")
+		hud.show_serve_indicator("Aim with arrows · Hold Space to charge · Release to serve")
 		player.position = Vector3(0, 0, PLAYER_BASELINE)
 		ball.hold_for_serve(Vector3(0, 0.5, PLAYER_BASELINE + 0.05))
+		# Reset aim to a sensible default each new serve.
+		serve_aim_x = 0.0
+		serve_aim_z = 0.7
+		serve_charging = false
+		serve_charge = 0.0
 	else:
 		hud.show_serve_indicator("Opponent serving...")
 		_reset_for_ai_serve()
@@ -632,22 +714,11 @@ func _handle_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	game_state.transition_to(GameStateRef.State.SERVE_ACTIVE)
 
 	var power = clampf(velocity.length() / 300.0, 0.5, 1.0)
-	# Center-ish target on opponent's side, past the kitchen. Sideways swipe
-	# nudges the target a bit; nothing fancy.
-	var target_x: float = 0.0
-	if abs(velocity.x) > 30:
-		target_x = clampf(velocity.x / 600.0, -0.4, 0.4)
-	var target = Vector3(target_x, 0, OPPONENT_BASELINE - 0.2)
-	ball.serve(ball.position, target, power)
-	ball.last_hitter_id = 0
-
-	EventBus.ball_served.emit(ball.position, target)
-	EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, power)
-
-	rally_active = true
-	game_state.transition_to(GameStateRef.State.PLAY)
-	hud.show_serve_indicator("")
-	hud.show_gesture_guide(true)
+	# Mobile swipe-serve also uses the current aim. Sideways swipe nudges aim.
+	if absf(velocity.x) > 30:
+		var nudge: float = clampf(velocity.x / 600.0, -0.4, 0.4)
+		serve_aim_x = clampf(serve_aim_x + nudge, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
+	_launch_player_serve(power)
 
 func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	if swipe_dir != "up":
