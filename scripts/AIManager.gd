@@ -59,26 +59,53 @@ var opponent_position: Vector3 = Vector3.ZERO
 var last_ball_position: Vector3 = Vector3.ZERO
 var ball_velocity: Vector3 = Vector3.ZERO
 
+# Two-bounce rule tracking — mirrors Main's so the AI doesn't try to volley
+# the serve. If the reaction timer expires before the required bounce has
+# happened, we set awaiting_bounce and decide on the next ball_bounced event.
+var bounces_since_last_hit: int = 0
+var total_bounces: int = 0
+var awaiting_bounce: bool = false
+
 # Signals
 signal ai_movement_target(position: Vector3)
 signal ai_shot_selected(shot_type: int, direction: Vector3, force: float)
 
 func _ready():
 	EventBus.ball_hit.connect(_on_ball_hit_opponent)
+	EventBus.ball_bounced.connect(_on_any_bounce)
+
+func _on_any_bounce(_position: Vector3, _side: int) -> void:
+	bounces_since_last_hit += 1
+	total_bounces += 1
+	# If we were holding back a decision waiting for the bounce, fire now.
+	if awaiting_bounce:
+		awaiting_bounce = false
+		_make_decision()
 
 func set_difficulty(diff: Difficulty) -> void:
 	difficulty = diff
 
 func _process(delta: float) -> void:
+	if awaiting_bounce:
+		return  # ball_bounced will trigger _make_decision
 	if not is_reacting:
 		return
-	
+
 	reaction_timer -= delta
 	if reaction_timer <= 0.0:
 		is_reacting = false
-		_make_decision()
+		# Two-bounce rule: until 2 total bounces, every hit must follow a
+		# bounce. If we're not allowed to hit yet, defer until the next
+		# bounce event.
+		if total_bounces < 2 and bounces_since_last_hit < 1:
+			awaiting_bounce = true
+		else:
+			_make_decision()
 
 func _on_ball_hit_opponent(shooter_id: int, _shot_type: int, _force: float) -> void:
+	# Any hit clears our "bounces since last hit" counter for the next
+	# legality check.
+	bounces_since_last_hit = 0
 	# Player team = id 0 (player) or 2 (player partner); AI reacts to both.
 	if shooter_id == 0 or shooter_id == 2:
 		_start_reaction()
@@ -228,3 +255,6 @@ func update_opponent_position(pos: Vector3) -> void:
 func reset() -> void:
 	is_reacting = false
 	reaction_timer = 0.0
+	awaiting_bounce = false
+	bounces_since_last_hit = 0
+	total_bounces = 0

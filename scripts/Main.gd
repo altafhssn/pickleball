@@ -1021,6 +1021,7 @@ func _reset_rally() -> void:
 	bounces_since_last_hit = 0
 	total_bounces_in_rally = 0
 	match_manager.reset_rally()
+	ai_manager.reset()
 	ball.reset()
 	ball.position = Vector3(0, 0.05, 0)
 
