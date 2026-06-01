@@ -475,45 +475,34 @@ func _update_player_auto_move(delta: float) -> void:
 	var opp_target_x = 0.0
 
 	if ball.is_in_play:
-		# Predict where the ball will land (or current position if already low).
-		var landing: Vector3 = _predict_ball_landing()
-
-		# Player movement clamps to [-1.3, -0.55] — between back baseline and
-		# just outside the kitchen line, so the auto-mover never parks the
-		# player inside the no-volley zone.
-		if ball.position.z < 0:
-			# Ball on player's side — move to predicted landing if available.
-			var plx: float = landing.x if landing.z < -0.05 else ball.position.x
-			var plz: float = landing.z if landing.z < -0.05 else ball.position.z
-			if is_doubles:
+		# Characters HOLD their baseline z. Only lateral (x) lean to track
+		# the ball, so the player doesn't feel like the character is
+		# auto-running to the landing spot. Ball.hit() applies the new
+		# velocity wherever the ball actually is, so the character not
+		# being on top of the ball is purely cosmetic.
+		if is_doubles:
+			if ball.position.z < 0:
 				if ball.position.x < 0:
-					player_target_z = clampf(plz + 0.1, -1.3, -0.55)
-					player_target_x = clampf(plx, -0.5, 0.0)
+					player_target_z = PLAYER_BASELINE
+					player_target_x = clampf(ball.position.x, -0.5, 0.0)
 				else:
 					player_target_z = PLAYER_BASELINE
 					player_target_x = PLAYER_LEFT
-			else:
-				player_target_z = clampf(plz + 0.1, -1.3, -0.55)
-				player_target_x = clampf(plx, -0.4, 0.4)
-			# Singles opponent: hold the kitchen line, tracking ball laterally.
-			if not is_doubles:
-				opp_target_z = 0.55
-				opp_target_x = clampf(ball.position.x * 0.5, -0.4, 0.4)
+			if ball.position.z > 0 and ball.position.x < 0:
+				opp_target_z = OPPONENT_BASELINE
+				opp_target_x = clampf(ball.position.x, -0.5, 0.0)
 		else:
-			# Ball on opponent's side — opponent moves to predicted landing,
-			# player drifts laterally to track the ball for visibility.
-			if not is_doubles:
-				var lz: float = landing.z if landing.z > 0.05 else ball.position.z
-				var lx: float = landing.x if landing.z > 0.05 else ball.position.x
-				opp_target_z = clampf(lz + 0.08, 0.55, 1.3)
-				opp_target_x = clampf(lx, -0.4, 0.4)
-				# Player tracks ball.x while waiting for the ball to come back.
-				player_target_x = clampf(ball.position.x * 0.4, -0.3, 0.3)
-				player_target_z = -1.0  # Shift back to baseline-ish
-
-		if is_doubles and ball.position.z > 0:
-			if ball.position.x < 0:
-				opp_target_z = clampf(ball.position.z - 0.1, 0.55, 1.3)
+			# Singles: both characters lean toward the ball.
+			player_target_z = PLAYER_BASELINE
+			opp_target_z = OPPONENT_BASELINE
+			# Stronger lateral lean when the ball is on your side, mild
+			# tracking when it's on the opponent's.
+			if ball.position.z < 0:
+				player_target_x = clampf(ball.position.x * 0.7, -0.5, 0.5)
+				opp_target_x = clampf(ball.position.x * 0.3, -0.4, 0.4)
+			else:
+				player_target_x = clampf(ball.position.x * 0.3, -0.4, 0.4)
+				opp_target_x = clampf(ball.position.x * 0.7, -0.5, 0.5)
 
 	# Move rate per second. Characters need to keep visible pace with the
 	# ball (which travels 3–6 units/sec) so the user can read what's happening.
