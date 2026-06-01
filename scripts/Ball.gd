@@ -71,13 +71,15 @@ func _on_body_entered(body: Node) -> void:
 	# Detect net hits
 	if body.is_in_group("net"):
 		ball_hit_net.emit()
+		EventBus.ball_net_hit.emit()
 		is_in_play = false
 	
 	# Detect ground/floor bounces
 	if body.is_in_group("court_floor"):
 		has_bounced_this_side = true
-		var side = 0  # TODO: determine player side
+		var side: int = 0 if global_position.z < 0 else 1
 		ball_landed.emit(global_position, side)
+		EventBus.ball_bounced.emit(global_position, side)
 
 func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0) -> void:
 	global_position = from_position

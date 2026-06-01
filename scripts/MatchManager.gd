@@ -50,7 +50,7 @@ func start_match(type: MatchType, doubles: bool = false) -> void:
 func _prepare_serve() -> void:
 	hits_in_rally = 0
 	ball_on_player_side = current_server == 0
-	EventBus.serve_ready.emit(current_server, current_serve_side)
+	serve_ready.emit(current_server, current_serve_side)
 
 # === PICKLEBALL RULES ===
 
@@ -118,7 +118,7 @@ func award_point_from_rally(loser_id: int, reason: String = "Rally lost") -> voi
 func _award_point(scorer_id: int, reason: String = "") -> void:
 	player_scores[scorer_id] += 1
 	EventBus.point_scored.emit(scorer_id, player_scores[scorer_id])
-	EventBus.point_awarded.emit(scorer_id, reason)
+	point_awarded.emit(scorer_id, reason)
 	
 	# Check win condition
 	if player_scores[scorer_id] >= POINTS_TO_WIN:
@@ -136,7 +136,7 @@ func _end_match(winner: int) -> void:
 	match_complete = true
 	winner_id = winner
 	EventBus.match_ended.emit(winner, {"player": player_scores[0], "opponent": player_scores[1]})
-	EventBus.match_over.emit(winner, player_scores)
+	match_over.emit(winner, player_scores)
 
 func reset_rally() -> void:
 	hits_in_rally = 0

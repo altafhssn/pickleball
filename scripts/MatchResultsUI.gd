@@ -37,16 +37,14 @@ func _ready() -> void:
 	play_again_button.pressed.connect(_on_play_again)
 	menu_button.pressed.connect(_on_menu)
 
-func setup(scores: Array, winner: int, stats: Dictionary = {}) -> void:
+func setup(scores: Array, winner: int, rewards_data: Dictionary = {}, stats: Dictionary = {}) -> void:
 	final_scores = scores
 	winner_id = winner
 	match_stats = stats
+	rewards = rewards_data
 	
 	# Display score and winner instantly
 	_update_static_display()
-	
-	# Grant rewards and get reward values
-	rewards = _grant_rewards()
 	
 	# Start animated display
 	_animate_display()
@@ -68,9 +66,9 @@ func _update_static_display() -> void:
 	var progress: float = PlayerData.get_level_progress()
 	xp_bar.value = progress
 	xp_bar.max_value = 1.0
-	var current_xp: int = PlayerData.get_current_level_xp() + PlayerData.get_xp_for_level(PlayerData.player_level)
+	var current_level_xp: int = PlayerData.get_current_level_xp()
 	var next_xp: int = PlayerData.get_xp_for_level(PlayerData.player_level + 1)
-	xp_progress_label.text = str(current_xp) + " / " + str(next_xp) + " XP"
+	xp_progress_label.text = str(current_level_xp) + " / " + str(next_xp) + " XP"
 
 func _grant_rewards() -> Dictionary:
 	# Calculate performance score from match result

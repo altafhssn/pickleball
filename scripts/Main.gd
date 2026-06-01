@@ -608,7 +608,12 @@ func _on_ai_shot_selected(shot_type: int, direction: Vector3, force: float) -> v
 	if not rally_active:
 		return
 	
-	if match_manager.check_kitchen_violation(opponent.position, false):
+	# Use the correct opponent character for kitchen check (doubles support)
+	var hitter: Node3D = opponent
+	if is_doubles and ball.last_hitter_id == 3:
+		hitter = opponent_partner
+	
+	if match_manager.check_kitchen_violation(hitter.position, false):
 		EventBus.kitchen_violation.emit(1)
 		if is_doubles:
 			doubles_manager.award_point_from_rally(1, "Opponent kitchen violation")

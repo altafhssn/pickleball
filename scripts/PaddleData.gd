@@ -20,25 +20,25 @@ struct PaddleDef:
 # Master paddle list — at least 8 paddles with tradeoffs
 const PADDLES: Array = [
 	# Starter paddle
-	PaddleDef.new(0, "Starter Paddle", 30, 50, 30, 40, Rarity.COMMON, 0, 0),
+	PaddleDef{id=0, name="Starter Paddle", power=30, control=50, spin=30, reach=40, rarity=Rarity.COMMON, price_coins=0, price_gems=0},
 	# Balanced
-	PaddleDef.new(1, "All-Court Classic", 40, 50, 40, 45, Rarity.COMMON, 500, 0),
+	PaddleDef{id=1, name="All-Court Classic", power=40, control=50, spin=40, reach=45, rarity=Rarity.COMMON, price_coins=500, price_gems=0},
 	# Power-focused
-	PaddleDef.new(2, "Power Smasher", 75, 25, 30, 35, Rarity.RARE, 1500, 0),
+	PaddleDef{id=2, name="Power Smasher", power=75, control=25, spin=30, reach=35, rarity=Rarity.RARE, price_coins=1500, price_gems=0},
 	# Control-focused
-	PaddleDef.new(3, "Precision Touch", 25, 80, 35, 40, Rarity.RARE, 1500, 0),
+	PaddleDef{id=3, name="Precision Touch", power=25, control=80, spin=35, reach=40, rarity=Rarity.RARE, price_coins=1500, price_gems=0},
 	# Spin-focused
-	PaddleDef.new(4, "Spin Master Pro", 30, 35, 80, 40, Rarity.RARE, 2000, 0),
+	PaddleDef{id=4, name="Spin Master Pro", power=30, control=35, spin=80, reach=40, rarity=Rarity.RARE, price_coins=2000, price_gems=0},
 	# Reach-focused
-	PaddleDef.new(5, "Long Reach Elite", 35, 40, 30, 80, Rarity.RARE, 2000, 0),
+	PaddleDef{id=5, name="Long Reach Elite", power=35, control=40, spin=30, reach=80, rarity=Rarity.RARE, price_coins=2000, price_gems=0},
 	# Epic: well-rounded high stats
-	PaddleDef.new(6, "Tournament Ace", 55, 60, 55, 55, Rarity.EPIC, 5000, 50),
+	PaddleDef{id=6, name="Tournament Ace", power=55, control=60, spin=55, reach=55, rarity=Rarity.EPIC, price_coins=5000, price_gems=50},
 	# Epic: power/control hybrid
-	PaddleDef.new(7, "Thunder Control", 65, 65, 40, 35, Rarity.EPIC, 6000, 60),
+	PaddleDef{id=7, name="Thunder Control", power=65, control=65, spin=40, reach=35, rarity=Rarity.EPIC, price_coins=6000, price_gems=60},
 	# Legendary: best all-rounder
-	PaddleDef.new(8, "Legendary Phantom", 80, 80, 70, 70, Rarity.LEGENDARY, 0, 500),
+	PaddleDef{id=8, name="Legendary Phantom", power=80, control=80, spin=70, reach=70, rarity=Rarity.LEGENDARY, price_coins=0, price_gems=500},
 	# Legendary: specialist extreme
-	PaddleDef.new(9, "Godhand Smash", 95, 15, 20, 30, Rarity.LEGENDARY, 0, 800),
+	PaddleDef{id=9, name="Godhand Smash", power=95, control=15, spin=20, reach=30, rarity=Rarity.LEGENDARY, price_coins=0, price_gems=800},
 ]
 
 
