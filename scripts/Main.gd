@@ -73,6 +73,7 @@ func _ready():
 	EventBus.drag_detected.connect(_on_drag)
 	ai_manager.ai_shot_selected.connect(_on_ai_shot_selected)
 	match_manager.point_awarded.connect(_on_point_awarded)
+	match_manager.side_out.connect(_on_side_out)
 	match_manager.serve_ready.connect(_on_serve_ready)
 	match_manager.match_over.connect(_on_match_over)
 	doubles_manager.point_awarded.connect(_on_doubles_point_awarded)
@@ -891,6 +892,16 @@ func _on_point_awarded(scorer_id: int, reason: String) -> void:
 		_reset_rally()
 		game_state.transition_to(GameStateRef.State.SERVE_WAIT)
 		_on_serve_ready(scorer_id, 0)
+
+func _on_side_out(new_server_id: int, reason: String) -> void:
+	# Side-out: receiver wins the rally, serve transfers, no point awarded.
+	rally_active = false
+	hud.show_message("Side out — " + reason)
+	await get_tree().create_timer(1.5).timeout
+	if not match_manager.match_complete:
+		_reset_rally()
+		game_state.transition_to(GameStateRef.State.SERVE_WAIT)
+		_on_serve_ready(new_server_id, match_manager.current_serve_side)
 
 func _on_match_over(winner_id: int, final_scores: Array) -> void:
 	var player_won = winner_id == 0

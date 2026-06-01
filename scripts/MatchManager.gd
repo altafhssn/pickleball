@@ -24,6 +24,7 @@ var winner_id: int = -1
 # Signals
 signal serve_ready(server_id: int, side: int)
 signal point_awarded(scorer_id: int, reason: String)
+signal side_out(new_server_id: int, reason: String)   # Side-out: serve transfers, no point
 signal match_over(winner_id: int, final_scores: Array)
 signal fault_declared(player_id: int, reason: String)
 
@@ -101,24 +102,48 @@ func record_hit() -> void:
 	hits_in_rally += 1
 
 func award_point_from_rally(loser_id: int, reason: String = "Rally lost") -> void:
-	var winner_id_calc: int = 1 if loser_id == 0 else 0
-	_award_point(winner_id_calc, reason)
+	# Singles side-out scoring: only the serving side can score. If the
+	# server wins the rally → 1 point + same server alternates court. If
+	# the server loses → side out, serve transfers, no point.
+	# Doubles still uses rally scoring via DoublesManager.
+	var winner_id: int = 1 if loser_id == 0 else 0
+	if is_doubles:
+		# Doubles path retained for compatibility with DoublesManager.
+		_award_point(winner_id, reason)
+		return
+	if winner_id == current_server:
+		_award_point(winner_id, reason)
+	else:
+		_handle_side_out(winner_id, reason)
 
 func _award_point(scorer_id: int, reason: String = "") -> void:
 	player_scores[scorer_id] += 1
 	EventBus.point_scored.emit(scorer_id, player_scores[scorer_id])
 	point_awarded.emit(scorer_id, reason)
-	
+
 	# Check win condition
 	if player_scores[scorer_id] >= POINTS_TO_WIN:
 		var score_diff = player_scores[scorer_id] - player_scores[1 - scorer_id]
 		if score_diff >= WIN_BY:
 			_end_match(scorer_id)
 			return
-	
-	# Switch server after losing a point (in traditional scoring)
-	# In rally scoring, the scorer serves next
-	current_server = scorer_id
+
+	# Side-out scoring: server stays the same and alternates court each point
+	# (right court on even score, left on odd). Doubles falls back to the
+	# previous rally-scoring behavior (winner serves next).
+	if is_doubles:
+		current_server = scorer_id
+	else:
+		current_server = scorer_id
+		current_serve_side = 1 if player_scores[scorer_id] % 2 == 1 else 0
+	_prepare_serve()
+
+func _handle_side_out(new_server_id: int, reason: String) -> void:
+	# Receiver won the rally — no point awarded, serve transfers.
+	# Their score determines starting court (right = even, left = odd).
+	current_server = new_server_id
+	current_serve_side = 1 if player_scores[new_server_id] % 2 == 1 else 0
+	side_out.emit(new_server_id, reason)
 	_prepare_serve()
 
 func _end_match(winner: int) -> void:
