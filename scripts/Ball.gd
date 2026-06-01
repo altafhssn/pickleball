@@ -103,29 +103,38 @@ func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0)
 func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vector3.ZERO) -> void:
 	if not is_in_play:
 		is_in_play = true
-	
+
 	shot_type = shot
 	spin_vector = spin
 	has_bounced_this_side = false
-	
-	# Speed based on shot type — scaled for the ~1.6-unit court.
+
+	# Speed and arc tuned per shot type. Net is ~0.16 tall, court half-length
+	# is ~0.8 from baseline-ish position to net — without enough vertical
+	# direction the ball clips the net or hits the floor first, especially
+	# for slow dinks. Enforce a minimum arc here so callers can't underfly.
+	var dir: Vector3 = direction
 	var shot_speed: float = base_speed * force
 	match shot:
 		ShotType.DINK:
-			shot_speed = 1.5 + (force * 1.0)   # Slow: 1.5–2.5
+			shot_speed = 2.5 + (force * 1.0)         # Slow & arced: 2.5–3.5
+			dir.y = maxf(dir.y, 0.55)
 		ShotType.DRIVE:
-			shot_speed = 4.0 + (force * 3.0)   # Fast: 4–7
+			shot_speed = 4.0 + (force * 3.0)         # Fast: 4–7
+			dir.y = maxf(dir.y, 0.20)
 		ShotType.LOB:
-			shot_speed = 2.5 + (force * 1.5)   # Medium: 2.5–4
-			direction.y = 0.5 + (force * 0.3)  # High arc
+			shot_speed = 3.0 + (force * 1.5)         # Medium: 3–4.5
+			dir.y = 0.7 + (force * 0.3)              # High arc — overrides
 		ShotType.VOLLEY:
-			shot_speed = 3.0 + (force * 3.0)   # Fast: 3–6
+			shot_speed = 3.0 + (force * 3.0)         # Fast: 3–6
+			dir.y = maxf(dir.y, 0.15)
 		ShotType.ERNE:
-			shot_speed = 4.0 + (force * 2.5)   # Fast: 4–6.5
+			shot_speed = 4.0 + (force * 2.5)         # Fast: 4–6.5
+			dir.y = maxf(dir.y, 0.25)
 		ShotType.ATP:
-			shot_speed = 2.5 + (force * 3.0)   # Varied: 2.5–5.5
-	
-	linear_velocity = direction.normalized() * shot_speed
+			shot_speed = 2.5 + (force * 3.0)         # Varied: 2.5–5.5
+			dir.y = maxf(dir.y, 0.25)
+
+	linear_velocity = dir.normalized() * shot_speed
 
 func reset() -> void:
 	is_in_play = false
