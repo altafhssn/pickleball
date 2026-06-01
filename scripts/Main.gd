@@ -231,21 +231,6 @@ func _start_practice_match() -> void:
 const PLAYER_TEAM_COLOR := Color(0.25, 0.55, 1.0)   # Blue — that's you.
 const OPPONENT_TEAM_COLOR := Color(1.0, 0.45, 0.15)  # Orange — the AI.
 
-# Server stands SERVE_OFFSET_X off the centerline on whichever court matches
-# the parity of their score (right court on even, left on odd).
-const SERVE_OFFSET_X: float = 0.3
-
-# Player team faces +z (right = +x); opponent team faces -z (right = -x).
-# `side` is 0 = right court, 1 = left court (from the server's POV).
-func _server_x_for(server_id: int, side: int) -> float:
-	if server_id == 0 or server_id == 2:
-		return SERVE_OFFSET_X if side == 0 else -SERVE_OFFSET_X
-	return -SERVE_OFFSET_X if side == 0 else SERVE_OFFSET_X
-
-# Diagonal: the bounce's x sign must be the opposite of the server's x sign.
-func _expected_serve_bounce_x_sign(server_id: int, side: int) -> float:
-	return -signf(_server_x_for(server_id, side))
-
 func _announce_shot(shot_type: int) -> void:
 	var name: String = ""
 	match shot_type:
@@ -498,14 +483,11 @@ func _update_characters_look_at_ball() -> void:
 func _on_serve_ready(server_id: int, _side: int) -> void:
 	is_player_serving = (server_id == 0)
 	
-	var serve_side: int = match_manager.current_serve_side
 	if is_player_serving:
 		player_serve_ready = true
-		var court_label: String = "right" if serve_side == 0 else "left"
-		hud.show_serve_indicator("Your serve (%s court) — Swipe up" % court_label)
-		var sx: float = _server_x_for(0, serve_side)
-		player.position = Vector3(sx, 0, PLAYER_BASELINE)
-		ball.hold_for_serve(Vector3(sx, 0.5, PLAYER_BASELINE + 0.05))
+		hud.show_serve_indicator("Your serve — Swipe up (or press Space)")
+		player.position = Vector3(0, 0, PLAYER_BASELINE)
+		ball.hold_for_serve(Vector3(0, 0.5, PLAYER_BASELINE + 0.05))
 	else:
 		hud.show_serve_indicator("Opponent serving...")
 		_reset_for_ai_serve()
@@ -526,9 +508,8 @@ func _on_doubles_serve_ready(server_team: int, server_pos: int, _side: int) -> v
 		_reset_for_doubles_ai_serve(server_pos)
 
 func _reset_for_ai_serve() -> void:
-	var sx: float = _server_x_for(1, match_manager.current_serve_side)
-	opponent.position = Vector3(sx, 0, OPPONENT_BASELINE)
-	ball.hold_for_serve(Vector3(sx, 0.5, OPPONENT_BASELINE - 0.05))
+	opponent.position = Vector3(0, 0, OPPONENT_BASELINE)
+	ball.hold_for_serve(Vector3(0, 0.5, OPPONENT_BASELINE - 0.05))
 
 	await get_tree().create_timer(0.8).timeout
 	if not match_manager.match_complete:
@@ -543,12 +524,9 @@ func _reset_for_doubles_ai_serve(server_pos: int) -> void:
 		_doubles_ai_serve(server_pos)
 
 func _ai_serve() -> void:
-	# Diagonal: target the opposite x sign from the AI's serve position.
-	var diag_sign: float = -signf(ball.position.x)
-	if diag_sign == 0.0:
-		diag_sign = 1.0  # fallback if serving from exactly x=0
-	var target = Vector3(diag_sign * randf_range(0.1, 0.35), 0, PLAYER_BASELINE + 0.3)
-	ball.serve(ball.position, target, 0.6)
+	# Center-ish target on the player's side, past their kitchen line.
+	var target = Vector3(randf_range(-0.3, 0.3), 0, PLAYER_BASELINE + 0.3)
+	ball.serve(ball.position, target, 0.7)
 	ball.last_hitter_id = 1
 	EventBus.ball_served.emit(ball.position, target)
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.6)
@@ -608,19 +586,13 @@ func _handle_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	player_serve_ready = false
 	game_state.transition_to(GameStateRef.State.SERVE_ACTIVE)
 
-	var power = clampf(velocity.length() / 300.0, 0.3, 1.0)
-	# Diagonal target — opposite x sign from the server's current x.
-	var diag_sign: float = -signf(ball.position.x)
-	if diag_sign == 0.0:
-		diag_sign = 1.0
-	var target_x: float = diag_sign * 0.25
+	var power = clampf(velocity.length() / 300.0, 0.5, 1.0)
+	# Center-ish target on opponent's side, past the kitchen. Sideways swipe
+	# nudges the target a bit; nothing fancy.
+	var target_x: float = 0.0
 	if abs(velocity.x) > 30:
-		# Player can nudge the aim, but it stays in the correct diagonal half.
-		var nudge: float = clampf(velocity.x / 600.0, -0.2, 0.2)
-		target_x = clampf(diag_sign * 0.25 + nudge, diag_sign * 0.05, diag_sign * 0.45) if diag_sign > 0.0 else clampf(diag_sign * 0.25 + nudge, diag_sign * 0.45, diag_sign * 0.05)
-
+		target_x = clampf(velocity.x / 600.0, -0.4, 0.4)
 	var target = Vector3(target_x, 0, OPPONENT_BASELINE - 0.2)
-	# ball.position is already the server's x set by hold_for_serve.
 	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
 
@@ -794,33 +766,17 @@ func _on_ball_landed(position: Vector3, _side: int) -> void:
 		_end_rally_double_bounce()
 
 # Returns true (and ends the rally) if the serve landed illegally.
+# Round-1 simplified: only check the serve actually crossed the net.
+# Out-of-bounds is caught by the per-frame _check_ball_out_of_bounds.
 func _is_serve_fault(pos: Vector3) -> bool:
 	var server_id: int = ball.last_hitter_id
-	# Player team (ids 0 & 2) lives at -z; opponent team (1 & 3) at +z.
 	var server_is_player_team: bool = server_id == 0 or server_id == 2
-	var ball_z: float = pos.z
-
-	# Serve must clear the net (land on the opposite side).
-	if server_is_player_team and ball_z < 0:
+	if server_is_player_team and pos.z < 0:
 		_serve_fault(server_id, "Serve in own court")
 		return true
-	if not server_is_player_team and ball_z > 0:
+	if not server_is_player_team and pos.z > 0:
 		_serve_fault(server_id, "Serve in own court")
 		return true
-
-	# Serve cannot land in the no-volley zone (|z| ≤ 0.48).
-	if absf(ball_z) <= 0.48:
-		_serve_fault(server_id, "Serve into kitchen")
-		return true
-
-	# Diagonal rule (singles only — doubles has its own rotation).
-	if not is_doubles:
-		var expected_sign: float = _expected_serve_bounce_x_sign(server_id, match_manager.current_serve_side)
-		# Centerline is "in" — only fault clearly on the wrong side.
-		if absf(pos.x) > 0.05 and signf(pos.x) != expected_sign:
-			_serve_fault(server_id, "Serve to wrong court")
-			return true
-
 	return false
 
 func _serve_fault(server_id: int, reason: String) -> void:
