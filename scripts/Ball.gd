@@ -6,13 +6,20 @@ extends RigidBody3D
 enum ShotType { DINK, DRIVE, LOB, VOLLEY, ERNE, ATP }
 
 # Export vars — tuneable in editor.
-# Speeds are tuned for the in-engine court (~1.6 units long), NOT real-world
-# pickleball metres. A real 13 m court at 30 mph drive would mean ~3.5 m/s
-# in our scaled units; we round up slightly so shots feel snappy.
+# Speeds are tuned for the in-engine court (3 units long), NOT real-world
+# pickleball metres. A real 13 m court at 30 mph drive scales to about
+# 3 m/s in our units; we round up slightly so shots feel snappy.
 @export var base_speed: float = 5.0
 @export var max_speed: float = 12.0
 @export var spin_factor: float = 0.3
-@export var drag_coefficient: float = 0.08  # ~4x tennis ball drag
+# Quadratic drag dominates at high speeds; linear drag handles the slow,
+# floaty tail so the wiffle ball decelerates the way it should.
+@export var drag_coefficient: float = 0.08
+@export var linear_drag: float = 0.45
+# Ball stops when it's basically at rest on the floor — avoids endless
+# micro-bouncing after a dink lands.
+@export var rest_speed_threshold: float = 0.35
+@export var rest_height_threshold: float = 0.08
 
 # Ball state
 var spin_vector: Vector3 = Vector3.ZERO  # Topspin/backspin/sidespin
@@ -20,6 +27,9 @@ var shot_type: ShotType = ShotType.DRIVE
 var last_hitter_id: int = -1
 var has_bounced_this_side: bool = false
 var is_in_play: bool = false
+# True once the rest-stop logic has fired its synthetic bounce for the
+# current rally segment. Cleared on every hit() / serve() / reset().
+var rest_fired: bool = false
 
 # Signals
 signal ball_landed(position: Vector3, side: int)  # side: 0=player, 1=opponent
@@ -27,50 +37,50 @@ signal ball_hit_net
 signal ball_lost(was_out: bool)
 
 func _ready():
-	# Configure RigidBody3D for pickleball physics.
-	# We use the default integrator for gravity + bounce, and add drag/Magnus
-	# additively in _integrate_forces.
-	gravity_scale = 1.0
-	custom_integrator = false
-	continuous_cd = true
-	contact_monitor = true
-	max_contacts_reported = 4
-	can_sleep = false
-	
-	# Use a PhysicsMaterial for bounce/friction
-	var mat = PhysicsMaterial.new()
-	mat.bounce = 0.4
-	mat.friction = 0.6
-	physics_material_override = mat
-	
-	# Connect body_entered for collision detection
+	# RigidBody flags + PhysicsMaterial live in Ball.tscn so the engine sees
+	# them on first physics tick. We only wire collisions here.
 	body_entered.connect(_on_body_entered)
 
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if not is_in_play:
 		return
-	
+
 	var velocity: Vector3 = state.linear_velocity
 	var speed: float = velocity.length()
-	
-	if speed < 0.1:
+
+	# Rest-stop: ball nearly motionless near the floor → kill velocity so it
+	# doesn't dribble forever after a soft bounce. Fire one synthetic bounce
+	# event so Main's rally end-condition can count "dead ball" as a miss.
+	if speed < rest_speed_threshold and state.transform.origin.y <= rest_height_threshold:
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+		if not rest_fired:
+			rest_fired = true
+			var pos: Vector3 = state.transform.origin
+			var side: int = 0 if pos.z < 0 else 1
+			ball_landed.emit(pos, side)
+			EventBus.ball_bounced.emit(pos, side)
 		return
-	
-	# === Authentic Wiffle Ball Drag ===
-	# Quadratic drag: F = -v * |v| * Cd
-	# Pickleball drag coefficient is ~4x higher than a tennis ball
-	# due to the holes in the wiffle ball
-	var drag_force: Vector3 = -velocity.normalized() * speed * speed * drag_coefficient
+
+	if speed < 0.05:
+		return
+
+	# === Wiffle ball drag ===
+	# Quadratic term dominates at high speeds (fast drives bleed off quickly);
+	# linear term keeps the slow tail from feeling floaty (real wiffle balls
+	# decelerate strongly even at low speed because of all the holes).
+	var dir: Vector3 = velocity / speed
+	var drag_force: Vector3 = -dir * (speed * speed * drag_coefficient + speed * linear_drag)
 	state.apply_central_force(drag_force)
-	
-	# Apply spin force (Magnus effect)
+
+	# Magnus effect from spin.
 	if spin_vector.length() > 0.01:
 		var magnus_force: Vector3 = spin_vector.cross(velocity) * spin_factor * 0.1
 		state.apply_central_force(magnus_force)
-	
-	# Clamp speed
+
+	# Hard cap so a runaway integrator can't punt the ball off the world.
 	if speed > max_speed:
-		state.linear_velocity = velocity.normalized() * max_speed
+		state.linear_velocity = dir * max_speed
 
 func _on_body_entered(body: Node) -> void:
 	# Detect net hits
@@ -90,6 +100,7 @@ func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0)
 	global_position = from_position
 	is_in_play = true
 	has_bounced_this_side = false
+	rest_fired = false
 	shot_type = ShotType.DRIVE
 	
 	# Calculate launch velocity toward target
@@ -107,6 +118,7 @@ func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vecto
 	shot_type = shot
 	spin_vector = spin
 	has_bounced_this_side = false
+	rest_fired = false
 
 	# Speed and arc tuned per shot type. Net is ~0.16 tall, court half-length
 	# is ~0.8 from baseline-ish position to net — without enough vertical
@@ -143,4 +155,5 @@ func reset() -> void:
 	spin_vector = Vector3.ZERO
 	shot_type = ShotType.DRIVE
 	has_bounced_this_side = false
+	rest_fired = false
 	global_position = Vector3.ZERO

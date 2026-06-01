@@ -17,12 +17,13 @@ emission = Color(0.95, 0.8, 0.3, 1)
 emission_energy_multiplier = 0.3
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_d4xkn"]
-bounce = 0.4
-friction = 0.6
+bounce = 0.28
+friction = 0.85
 
 [node name="Ball" type="RigidBody3D"]
+mass = 0.5
 gravity_scale = 1.0
-custom_integrator = true
+custom_integrator = false
 continuous_cd = true
 contact_monitor = true
 max_contacts_reported = 4
