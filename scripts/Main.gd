@@ -80,7 +80,14 @@ func _ready():
 	ball.ball_hit_net.connect(_on_ball_hit_net)
 	EventBus.ball_hit.connect(_on_any_ball_hit_for_rally_tracking)
 	
-	# Initialize game feel and capture the authored camera position as our base.
+	# Place the camera behind the player (player is at -z) so the human
+	# sees their own (blue) character in the foreground, standard sports
+	# game convention. Authored camera in Main.tscn was on the opponent's
+	# side, which made the user feel like they were playing the far guy.
+	camera.position = Vector3(0, 1.5, -2.5)
+	camera.look_at(Vector3(0, 0.3, 0), Vector3.UP)
+
+	# Initialize game feel and capture the (new) camera position as our base.
 	game_feel.setup(camera, hud)
 	camera_base_pos = camera.position
 
@@ -352,12 +359,16 @@ func _predict_ball_landing() -> Vector3:
 	return Vector3(pos.x + vel.x * t, 0.0, pos.z + vel.z * t)
 
 func _update_camera() -> void:
-	# Smoothly follow the ball's z without ever writing camera.position
-	# directly; GameFeel adds shake on top.
-	var target_z: float = ball.position.z * 0.3
-	var dest_z: float = (2.8 if is_doubles else 2.5) + target_z
+	# Camera sits on the player's side (negative z) looking toward +z, so
+	# the human's own (blue) character is in the foreground. dest_z stays
+	# negative; we still nudge it slightly with the ball so the framing
+	# pulls back when the ball is deep on the opponent's side.
+	var follow: float = ball.position.z * 0.15
+	var dest_z: float = (-2.8 if is_doubles else -2.5) - follow
 	camera_base_pos.z = move_toward(camera_base_pos.z, dest_z, 0.05)
 	camera.position = camera_base_pos + game_feel.current_shake_offset
+	# Re-aim each frame so the basis stays consistent as we follow the ball.
+	camera.look_at(Vector3(0, 0.3, 0), Vector3.UP)
 
 # === POWER METER ===
 
