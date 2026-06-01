@@ -55,6 +55,13 @@ const OPPONENT_BASELINE: float = 0.8
 # Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
 var camera_base_pos: Vector3 = Vector3.ZERO
 
+# Rally end-condition tracking
+var bounces_since_last_hit: int = 0
+# Court is roughly x ∈ [-0.5, 0.5], z ∈ [-0.9, 0.9]; small margins beyond.
+const OUT_X_LIMIT: float = 0.6
+const OUT_Z_LIMIT: float = 1.0
+const FLOOR_Y_LIMIT: float = -0.3
+
 func _ready():
 	EventBus.swipe_detected.connect(_on_swipe_detected)
 	EventBus.tap_detected.connect(_on_tap_detected)
@@ -70,6 +77,7 @@ func _ready():
 	
 	ball.ball_landed.connect(_on_ball_landed)
 	ball.ball_hit_net.connect(_on_ball_hit_net)
+	EventBus.ball_hit.connect(_on_any_ball_hit_for_rally_tracking)
 	
 	# Initialize game feel and capture the authored camera position as our base.
 	game_feel.setup(camera, hud)
@@ -238,6 +246,7 @@ func _process(delta: float) -> void:
 	_update_power_meter(delta)
 	_update_screen_effects(delta)
 	_update_camera()
+	_check_ball_out_of_bounds()
 
 	# Make characters look toward the ball each frame
 	_update_characters_look_at_ball()
@@ -657,17 +666,50 @@ func _on_ai_shot_selected(shot_type: int, direction: Vector3, force: float) -> v
 
 # === BALL EVENTS ===
 
-func _on_ball_landed(position: Vector3, _side: int) -> void:
+func _on_ball_landed(_position: Vector3, _side: int) -> void:
 	if not rally_active:
 		return
-	
-	var landed_on_player_side = position.z < 0
-	if landed_on_player_side:
-		if match_manager.must_ball_bounce():
-			pass
+	bounces_since_last_hit += 1
+	if bounces_since_last_hit >= 2:
+		_end_rally_double_bounce()
+
+func _on_any_ball_hit_for_rally_tracking(_shooter_id: int, _shot_type: int, _force: float) -> void:
+	bounces_since_last_hit = 0
+
+# Hitter wins — opponent couldn't return before the second bounce.
+func _end_rally_double_bounce() -> void:
+	if not rally_active:
+		return
+	rally_active = false
+	var hitter: int = ball.last_hitter_id
+	if is_doubles:
+		var loser_team: int = 0 if hitter in [1, 3] else 1
+		doubles_manager.award_point_from_rally(loser_team, "Double bounce")
 	else:
-		if match_manager.must_ball_bounce():
-			pass
+		var loser_id: int = 1 if hitter == 0 else 0
+		match_manager.award_point_from_rally(loser_id, "Double bounce")
+
+# Hitter loses — shot went out.
+func _end_rally_out_of_bounds() -> void:
+	if not rally_active:
+		return
+	rally_active = false
+	var hitter: int = ball.last_hitter_id
+	if is_doubles:
+		var loser_team: int = 0 if hitter in [0, 2] else 1
+		doubles_manager.award_point_from_rally(loser_team, "Out of bounds")
+	else:
+		# Defensive fallback if last_hitter_id is unset (-1): give the point
+		# to whichever side the ball ended up on.
+		var loser_id: int = hitter if hitter >= 0 else (0 if ball.position.z < 0 else 1)
+		match_manager.award_point_from_rally(loser_id, "Out of bounds")
+
+func _check_ball_out_of_bounds() -> void:
+	if not rally_active or not ball.is_in_play:
+		return
+	var pos: Vector3 = ball.position
+	if absf(pos.x) > OUT_X_LIMIT or absf(pos.z) > OUT_Z_LIMIT or pos.y < FLOOR_Y_LIMIT:
+		_end_rally_out_of_bounds()
 
 func _on_ball_hit_net() -> void:
 	if rally_active:
@@ -829,6 +871,7 @@ func _challenge_report_ace() -> void:
 
 func _reset_rally() -> void:
 	rally_active = false
+	bounces_since_last_hit = 0
 	match_manager.reset_rally()
 	ball.reset()
 	ball.position = Vector3(0, 0.05, 0)
