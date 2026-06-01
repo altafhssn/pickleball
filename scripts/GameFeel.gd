@@ -75,14 +75,14 @@ func flash(color: Color, duration: float) -> void:
 	flash_timer = duration
 
 func _on_hit(_shooter_id: int, _shot_type: int, force: float) -> void:
-	shake(0.02 + force * 0.03, 0.15 + force * 0.1)
+	shake(0.01 + force * 0.015, 0.10 + force * 0.06)
 
 func _on_bounce(_pos: Vector3, _side: int) -> void:
-	shake(0.01, 0.08)
+	shake(0.005, 0.06)
 
 func _on_point_scored(_player_id: int, _score: int) -> void:
 	flash(Color(1, 1, 0.5), 0.3)
-	shake(0.05, 0.2)
+	shake(0.025, 0.15)
 
 func _on_net_hit() -> void:
-	shake(0.03, 0.12)
+	shake(0.015, 0.10)

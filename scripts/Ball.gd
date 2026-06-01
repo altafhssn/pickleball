@@ -154,24 +154,27 @@ func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vecto
 	# that clear the net AND land in-bounds on the opposite side.
 	var dir: Vector3 = direction
 	var shot_speed: float = base_speed * force
+	# Speeds reduced ~20% from previous tuning to give the player visible
+	# reaction time. Combined with a shorter (0.10) net, all shots still
+	# clear consistently.
 	match shot:
 		ShotType.DINK:
-			shot_speed = 3.0 + (force * 1.0)         # Slow & arced: 3.0–4.0
-			dir.y = maxf(dir.y, 1.0)                 # High arc — lands in kitchen
+			shot_speed = 2.5 + (force * 0.8)         # 2.5–3.3
+			dir.y = maxf(dir.y, 1.0)
 		ShotType.DRIVE:
-			shot_speed = 4.0 + (force * 2.0)         # Fast but in bounds: 4–6
+			shot_speed = 3.5 + (force * 1.7)         # 3.5–5.2
 			dir.y = maxf(dir.y, 0.35)
 		ShotType.LOB:
-			shot_speed = 3.5 + (force * 1.5)         # Medium: 3.5–5
-			dir.y = 1.5 + (force * 0.5)              # Very high arc — overrides
+			shot_speed = 3.0 + (force * 1.3)         # 3.0–4.3
+			dir.y = 1.5 + (force * 0.5)
 		ShotType.VOLLEY:
-			shot_speed = 3.5 + (force * 2.5)         # Fast: 3.5–6
+			shot_speed = 3.0 + (force * 2.0)         # 3.0–5.0
 			dir.y = maxf(dir.y, 0.30)
 		ShotType.ERNE:
-			shot_speed = 4.0 + (force * 2.0)
+			shot_speed = 3.5 + (force * 1.7)
 			dir.y = maxf(dir.y, 0.40)
 		ShotType.ATP:
-			shot_speed = 3.0 + (force * 2.0)
+			shot_speed = 2.5 + (force * 1.7)
 			dir.y = maxf(dir.y, 0.35)
 
 	linear_velocity = dir.normalized() * shot_speed

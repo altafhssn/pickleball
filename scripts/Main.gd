@@ -84,6 +84,10 @@ var bounces_since_last_hit: int = 0
 # Used to enforce the two-bounce rule (until 2 total bounces, every hit must
 # follow a bounce) and to flag serve faults on the first bounce.
 var total_bounces_in_rally: int = 0
+# Detect a ball that's come to rest in the middle of a rally (rare with
+# proper physics, but a real bug-prevention belt-and-suspenders).
+var ball_rest_timer: float = 0.0
+const BALL_REST_TIMEOUT: float = 0.8
 # Court extends x ∈ [-1.0, 1.0] (sidelines), z ∈ [-1.5, 1.5] (baselines).
 # Allow a small "in" margin so close shots don't get incorrectly called out.
 const OUT_X_LIMIT: float = 1.05
@@ -453,6 +457,7 @@ func _process(delta: float) -> void:
 	_update_landing_marker()
 	_process_serve_input(delta)
 	_process_rally_input()
+	_check_ball_stuck(delta)
 
 	# Make characters look toward the ball each frame
 	_update_characters_look_at_ball()
@@ -1008,6 +1013,22 @@ func _update_turn_indicator() -> void:
 			hud.show_serve_indicator("Your turn — swipe!")
 	else:
 		hud.show_serve_indicator("")
+
+func _check_ball_stuck(delta: float) -> void:
+	# If the ball comes to a halt during an active rally (e.g. rolled to a
+	# stop after a soft dink the AI couldn't reach), give it BALL_REST_TIMEOUT
+	# seconds and then end the rally — the last hitter wins, because the
+	# other side didn't return in time.
+	if not rally_active or not ball.is_in_play:
+		ball_rest_timer = 0.0
+		return
+	if ball.linear_velocity.length() < 0.35:
+		ball_rest_timer += delta
+		if ball_rest_timer >= BALL_REST_TIMEOUT:
+			ball_rest_timer = 0.0
+			_end_rally_double_bounce()
+	else:
+		ball_rest_timer = 0.0
 
 func _check_ball_out_of_bounds() -> void:
 	if not rally_active or not ball.is_in_play:
