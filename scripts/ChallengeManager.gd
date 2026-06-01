@@ -23,27 +23,10 @@ func _ready() -> void:
 	_connect_event_bus()
 
 func _connect_event_bus() -> void:
-	# Connect to EventBus to track progress
-	EventBus.ball_hit.connect(_on_ball_hit)
+	# Rally length is reported externally via report_rally_length() from Main.gd —
+	# no per-hit listener needed here.
 	EventBus.match_ended.connect(_on_match_ended)
 	EventBus.point_scored.connect(_on_point_scored)
-
-func _on_ball_hit(shooter_id: int, _shot_type: int, _force: float) -> void:
-	if shooter_id != 0:
-		return  # Only track player hits
-	
-	# Track rally length hits for active rallies
-	for cid in challenge_ids:
-		var chall = ChallengeData.get_challenge(cid)
-		if chall == null:
-			continue
-		if challenge_claimed.get(cid, false):
-			continue
-		
-		match chall.type:
-			"rally_length":
-				# rally_length progress is tracked via report_rally_length
-				pass
 
 func _on_match_ended(winner_id: int, _score: Dictionary) -> void:
 	# Track matches_played

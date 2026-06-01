@@ -24,9 +24,11 @@ signal ball_hit_net
 signal ball_lost(was_out: bool)
 
 func _ready():
-	# Configure RigidBody3D for pickleball physics
+	# Configure RigidBody3D for pickleball physics.
+	# We use the default integrator for gravity + bounce, and add drag/Magnus
+	# additively in _integrate_forces.
 	gravity_scale = 1.0
-	custom_integrator = true  # We handle forces ourselves
+	custom_integrator = false
 	continuous_cd = true
 	contact_monitor = true
 	max_contacts_reported = 4

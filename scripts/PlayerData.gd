@@ -76,13 +76,11 @@ func add_xp(amount: int) -> void:
 	save()
 
 func _check_level_up() -> void:
-	var next_level_xp: int = get_xp_for_level(player_level + 1)
-	while xp >= next_level_xp and player_level < 50:
-		# Level up
-		xp -= next_level_xp
+	# xp is cumulative lifetime XP; level up while the next threshold is crossed.
+	# Matches the cumulative model used by get_current_level_xp / get_level_progress.
+	while player_level < 50 and xp >= get_xp_for_level(player_level + 1):
 		player_level += 1
 		EventBus.menu_navigated.emit("level_up", str(player_level))
-		next_level_xp = get_xp_for_level(player_level + 1)
 
 func get_xp_for_level(level: int) -> int:
 	if level <= 1:

@@ -29,7 +29,8 @@ signal fault_declared(player_id: int, reason: String)
 
 func _ready():
 	EventBus.ball_bounced.connect(_on_ball_bounced)
-	EventBus.ball_net_hit.connect(_on_ball_net_hit)
+	# Net-hit scoring is awarded by Main.gd (uses ball.last_hitter_id and is doubles-aware);
+	# don't double-award here.
 	EventBus.ball_hit.connect(_on_ball_hit)
 	EventBus.rally_began.connect(_on_rally_began)
 
@@ -74,11 +75,10 @@ func validate_serve(swing_direction: String, contact_height: float) -> bool:
 		return false  # Waist height (36 inches = 0.914m) max
 	return true
 
-func _is_in_kitchen(position: Vector3, is_player_side: bool) -> bool:
-	# Kitchen extends 0.2 units from net on each side
-	# Net is at z=0, player side is z>0, opponent side is z<0
-	var z_pos = position.z if is_player_side else -position.z
-	return z_pos >= 0.0 and z_pos <= 0.2
+func _is_in_kitchen(position: Vector3, _is_player_side: bool) -> bool:
+	# Kitchen (no-volley zone) extends 0.2 units from the net (z=0) on either side.
+	# Convention: player baseline z<0, opponent baseline z>0 (see Main.gd).
+	return absf(position.z) <= 0.2
 
 # === EVENT HANDLERS ===
 
@@ -89,21 +89,10 @@ func _on_ball_bounced(_position: Vector3, side: int) -> void:
 	else:
 		ball_on_player_side = false
 
-func _on_ball_net_hit() -> void:
-	# Ball hit the net — fault if it was a serve, otherwise loss of point
-	if hits_in_rally == 0:
-		# Serve into net = fault
-		_award_point(1 if current_server == 0 else 0, "Serve into net")
-	else:
-		_award_point(1 if ball_on_player_side else 0, "Ball hit net")
-
-func _on_ball_hit(shooter_id: int, _shot_type: int, _force: float) -> void:
-	hits_in_rally += 1
-	
-	# Check kitchen violation on volley
-	if must_ball_bounce():
-		# Player is volleying before the two-bounce — legal for non-first-two hits
-		pass
+func _on_ball_hit(_shooter_id: int, _shot_type: int, _force: float) -> void:
+	# hits_in_rally is incremented via record_hit() called from Main.gd
+	# to keep a single source of truth.
+	pass
 
 func _on_rally_began() -> void:
 	rally_number += 1

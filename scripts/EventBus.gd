@@ -19,7 +19,7 @@ signal power_shot_charged(charge_level: float)
 # Ball Signals
 signal ball_served(from_position: Vector3, target: Vector3)
 signal ball_hit(shooter_id: int, shot_type: int, force: float)
-signal ball_bounced(position: Vector3)
+signal ball_bounced(position: Vector3, side: int)  # side: 0=player, 1=opponent
 signal ball_out_of_bounds
 signal ball_net_hit
 signal ball_landed_in_kitchen

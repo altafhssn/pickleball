@@ -11,7 +11,8 @@ var shake_timer: float = 0.0
 var flash_duration: float = 0.0
 var flash_timer: float = 0.0
 var flash_node: ColorRect = null
-var original_camera_pos: Vector3 = Vector3.ZERO
+# Captured at shake-start so per-frame camera follow keeps working between shakes.
+var shake_base_pos: Vector3 = Vector3.ZERO
 
 func _ready():
 	EventBus.ball_hit.connect(_on_hit)
@@ -22,8 +23,7 @@ func _ready():
 func setup(cam: Camera3D, hud_layer: CanvasLayer) -> void:
 	camera = cam
 	hud = hud_layer
-	original_camera_pos = camera.position
-	
+
 	# Create flash overlay
 	flash_node = ColorRect.new()
 	flash_node.name = "ScreenFlash"
@@ -34,18 +34,19 @@ func setup(cam: Camera3D, hud_layer: CanvasLayer) -> void:
 	hud.add_child(flash_node)
 
 func _process(delta: float) -> void:
-	# Camera shake
+	# Camera shake — base position is captured at shake() so per-frame camera
+	# follow (Main._update_camera) keeps composing correctly between shakes.
 	if shake_timer > 0 and camera:
 		shake_timer -= delta
 		var decay = shake_timer / shake_duration
 		var intensity = shake_intensity * decay
-		camera.position = original_camera_pos + Vector3(
+		camera.position = shake_base_pos + Vector3(
 			randf_range(-intensity, intensity),
 			randf_range(-intensity, intensity),
 			randf_range(-intensity * 0.5, intensity * 0.5)
 		)
 		if shake_timer <= 0:
-			camera.position = original_camera_pos
+			camera.position = shake_base_pos
 	
 	# Screen flash
 	if flash_timer > 0 and flash_node:
@@ -61,6 +62,7 @@ func shake(intensity: float, duration: float) -> void:
 	shake_intensity = intensity
 	shake_duration = duration
 	shake_timer = duration
+	shake_base_pos = camera.position
 
 func flash(color: Color, duration: float) -> void:
 	if not flash_node:

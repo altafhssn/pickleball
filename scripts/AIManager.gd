@@ -57,6 +57,7 @@ var target_position: Vector3 = Vector3.ZERO
 var player_position: Vector3 = Vector3.ZERO
 var opponent_position: Vector3 = Vector3.ZERO
 var last_ball_position: Vector3 = Vector3.ZERO
+var ball_velocity: Vector3 = Vector3.ZERO
 
 # Signals
 signal ai_movement_target(position: Vector3)
@@ -78,10 +79,9 @@ func _process(delta: float) -> void:
 		_make_decision()
 
 func _on_ball_hit_opponent(shooter_id: int, _shot_type: int, _force: float) -> void:
-	if shooter_id == 0:  # Player hit the ball, AI needs to react
+	# Player team = id 0 (player) or 2 (player partner); AI reacts to both.
+	if shooter_id == 0 or shooter_id == 2:
 		_start_reaction()
-	elif shooter_id == 1:  # AI hit it — track for positioning
-		pass
 
 func _start_reaction() -> void:
 	var config = DIFFICULTY_CONFIG[difficulty]
@@ -128,17 +128,13 @@ func _make_decision() -> void:
 		_apply_random_variation()
 
 func _can_reach_ball() -> bool:
-	# Simplified: estimate if AI can reach ball based on speed/distance
+	# Estimate if the AI can reach the ball before it arrives at its target.
 	var distance: float = target_ball_position.distance_to(player_position)
 	var time_to_ball: float = distance / 8.0  # AI moves at 8 units/s
-	var ball_speed: float = _estimate_ball_speed()
+	var ball_speed: float = maxf(ball_velocity.length(), 0.5)
 	var time_until_arrival: float = distance / ball_speed
-	
-	return time_to_ball < time_until_arrival + 0.5
 
-func _estimate_ball_speed() -> float:
-	var speed: float = last_ball_position.distance_to(target_ball_position)
-	return maxf(speed, 5.0)
+	return time_to_ball < time_until_arrival + 0.5
 
 func _is_ball_in_kitchen() -> bool:
 	return abs(target_ball_position.z) < 0.25 and target_ball_position.y < 0.3
@@ -202,6 +198,9 @@ func _apply_random_variation() -> void:
 func update_ball_position(pos: Vector3) -> void:
 	last_ball_position = target_ball_position
 	target_ball_position = pos
+
+func update_ball_velocity(vel: Vector3) -> void:
+	ball_velocity = vel
 
 func update_player_position(pos: Vector3) -> void:
 	player_position = pos

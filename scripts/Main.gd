@@ -220,6 +220,7 @@ func _process(delta: float) -> void:
 	
 	if ball.is_in_play:
 		ai_manager.update_ball_position(ball.position)
+		ai_manager.update_ball_velocity(ball.linear_velocity)
 		ai_manager.update_player_position(opponent.position)
 		ai_manager.update_opponent_position(player.position)
 		
@@ -232,7 +233,8 @@ func _process(delta: float) -> void:
 	_update_paddle_swing(delta)
 	_update_power_meter(delta)
 	_update_screen_effects(delta)
-	
+	_update_camera()
+
 	# Make characters look toward the ball each frame
 	_update_characters_look_at_ball()
 
@@ -476,26 +478,26 @@ func _handle_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 		hud.show_serve_indicator("Swipe UP to serve!")
 		return
 	
-	if not match_manager.validate_serve(swipe_dir, 0.5):
+	if not match_manager.validate_serve(swipe_dir, ball.position.y):
 		hud.show_serve_indicator("Serve must be underhand!")
 		return
-	
+
 	player_serve_ready = false
 	game_state.transition_to(GameStateRef.State.SERVE_ACTIVE)
-	
+
 	var power = clampf(velocity.length() / 300.0, 0.3, 1.0)
 	var target_x = 0.0
 	if abs(velocity.x) > 30:
 		target_x = sign(velocity.x) * 0.2
-	
+
 	var target = Vector3(target_x, 0, OPPONENT_BASELINE - 0.2)
 	ball.position = Vector3(0, 0.5, PLAYER_BASELINE + 0.05)
 	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
-	
+
 	EventBus.ball_served.emit(ball.position, target)
 	EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, power)
-	
+
 	rally_active = true
 	game_state.transition_to(GameStateRef.State.PLAY)
 	hud.show_serve_indicator("")
@@ -505,8 +507,8 @@ func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	if swipe_dir != "up":
 		hud.show_serve_indicator("Swipe UP to serve!")
 		return
-	
-	if not match_manager.validate_serve(swipe_dir, 0.5):
+
+	if not match_manager.validate_serve(swipe_dir, ball.position.y):
 		hud.show_serve_indicator("Serve must be underhand!")
 		return
 	
@@ -618,7 +620,8 @@ func _on_ai_shot_selected(shot_type: int, direction: Vector3, force: float) -> v
 		if is_doubles:
 			doubles_manager.award_point_from_rally(1, "Opponent kitchen violation")
 		else:
-			match_manager.award_point_from_rally(0, "Opponent kitchen violation")
+			# award_point_from_rally takes the LOSER id — opponent loses on their violation.
+			match_manager.award_point_from_rally(1, "Opponent kitchen violation")
 		return
 	
 	ball.hit(force, direction, shot_type)
