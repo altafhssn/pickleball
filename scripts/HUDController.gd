@@ -2,7 +2,7 @@
 # Controls the HUD CanvasLayer — score display, serve indicator, gesture guide
 extends CanvasLayer
 
-@onready var score_label: Label = $ScoreLabel
+@onready var score_label: RichTextLabel = $ScoreLabel
 @onready var serve_label: Label = $ServeLabel
 @onready var message_label: Label = $MessageLabel
 @onready var power_bar: ProgressBar = $PowerIndicator
@@ -11,7 +11,7 @@ extends CanvasLayer
 var message_timer: float = 0.0
 
 func _ready():
-	score_label.text = "0  –  0"
+	_set_score_bbcode(0, 0)
 	serve_label.text = ""
 	message_label.text = ""
 	power_bar.visible = false
@@ -24,9 +24,16 @@ func _process(delta: float) -> void:
 		message_timer -= delta
 		if message_timer <= 0:
 			message_label.text = ""
+			message_label.modulate = Color(1, 1, 1, 1)
+
+const PLAYER_COLOR := Color(0.27, 0.53, 1.0)   # Blue — matches the player character
+const OPPONENT_COLOR := Color(1.0, 0.5, 0.2)   # Orange — matches the AI character
 
 func update_score(player_score: int, opponent_score: int) -> void:
-	score_label.text = "%d  –  %d" % [player_score, opponent_score]
+	_set_score_bbcode(player_score, opponent_score)
+
+func _set_score_bbcode(player_score: int, opponent_score: int) -> void:
+	score_label.text = "[center][color=#4488ff]YOU %d[/color]  –  [color=#ff8033]AI %d[/color][/center]" % [player_score, opponent_score]
 
 func show_serve_indicator(text: String) -> void:
 	serve_label.text = text
@@ -37,8 +44,9 @@ func show_gesture_guide(visible_flag: bool) -> void:
 	else:
 		gesture_guide.text = ""
 
-func show_message(text: String) -> void:
+func show_message(text: String, color: Color = Color(1, 1, 1, 1)) -> void:
 	message_label.text = text
+	message_label.modulate = color
 	message_timer = 2.0
 
 func show_rewards(rewards: Dictionary) -> void:

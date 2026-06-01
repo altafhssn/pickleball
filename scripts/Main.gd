@@ -1055,10 +1055,13 @@ func _on_point_awarded(scorer_id: int, reason: String) -> void:
 	_challenge_report_rally(scorer_id)
 	
 	hud.update_score(match_manager.player_scores[0], match_manager.player_scores[1])
-	hud.show_message(str("Point! ", reason))
-	
+	if scorer_id == 0 or scorer_id == 2:
+		hud.show_message("✦  YOU SCORED  ✦\n" + reason, PLAYER_TEAM_COLOR)
+	else:
+		hud.show_message("✦  AI SCORED  ✦\n" + reason, OPPONENT_TEAM_COLOR)
+
 	await get_tree().create_timer(1.5).timeout
-	
+
 	if not match_manager.match_complete:
 		_reset_rally()
 		game_state.transition_to(GameStateRef.State.SERVE_WAIT)
