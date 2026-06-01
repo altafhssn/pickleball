@@ -5,9 +5,12 @@ extends RigidBody3D
 # Shot type enum (matches PRD/GDD spec)
 enum ShotType { DINK, DRIVE, LOB, VOLLEY, ERNE, ATP }
 
-# Export vars — tuneable in editor
-@export var base_speed: float = 15.0
-@export var max_speed: float = 35.0
+# Export vars — tuneable in editor.
+# Speeds are tuned for the in-engine court (~1.6 units long), NOT real-world
+# pickleball metres. A real 13 m court at 30 mph drive would mean ~3.5 m/s
+# in our scaled units; we round up slightly so shots feel snappy.
+@export var base_speed: float = 5.0
+@export var max_speed: float = 12.0
 @export var spin_factor: float = 0.3
 @export var drag_coefficient: float = 0.08  # ~4x tennis ball drag
 
@@ -105,22 +108,22 @@ func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vecto
 	spin_vector = spin
 	has_bounced_this_side = false
 	
-	# Speed based on shot type
+	# Speed based on shot type — scaled for the ~1.6-unit court.
 	var shot_speed: float = base_speed * force
 	match shot:
 		ShotType.DINK:
-			shot_speed = 5.0 + (force * 3.0)  # Slow: 5-8
+			shot_speed = 1.5 + (force * 1.0)   # Slow: 1.5–2.5
 		ShotType.DRIVE:
-			shot_speed = 15.0 + (force * 10.0)  # Fast: 15-25
+			shot_speed = 4.0 + (force * 3.0)   # Fast: 4–7
 		ShotType.LOB:
-			shot_speed = 8.0 + (force * 4.0)  # Medium: 8-12
+			shot_speed = 2.5 + (force * 1.5)   # Medium: 2.5–4
 			direction.y = 0.5 + (force * 0.3)  # High arc
 		ShotType.VOLLEY:
-			shot_speed = 10.0 + (force * 10.0)  # Fast: 10-20
+			shot_speed = 3.0 + (force * 3.0)   # Fast: 3–6
 		ShotType.ERNE:
-			shot_speed = 15.0 + (force * 7.0)  # Fast: 15-22
+			shot_speed = 4.0 + (force * 2.5)   # Fast: 4–6.5
 		ShotType.ATP:
-			shot_speed = 8.0 + (force * 10.0)  # Varied
+			shot_speed = 2.5 + (force * 3.0)   # Varied: 2.5–5.5
 	
 	linear_velocity = direction.normalized() * shot_speed
 

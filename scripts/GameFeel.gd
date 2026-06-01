@@ -11,8 +11,9 @@ var shake_timer: float = 0.0
 var flash_duration: float = 0.0
 var flash_timer: float = 0.0
 var flash_node: ColorRect = null
-# Captured at shake-start so per-frame camera follow keeps working between shakes.
-var shake_base_pos: Vector3 = Vector3.ZERO
+# Additive offset that Main applies on top of its own camera base position.
+# Refreshed every frame while shake is active; zero otherwise.
+var current_shake_offset: Vector3 = Vector3.ZERO
 
 func _ready():
 	EventBus.ball_hit.connect(_on_hit)
@@ -34,19 +35,19 @@ func setup(cam: Camera3D, hud_layer: CanvasLayer) -> void:
 	hud.add_child(flash_node)
 
 func _process(delta: float) -> void:
-	# Camera shake — base position is captured at shake() so per-frame camera
-	# follow (Main._update_camera) keeps composing correctly between shakes.
-	if shake_timer > 0 and camera:
+	# Compute additive shake offset; Main owns the camera base position
+	# and combines it with this offset each frame.
+	if shake_timer > 0:
 		shake_timer -= delta
-		var decay = shake_timer / shake_duration
-		var intensity = shake_intensity * decay
-		camera.position = shake_base_pos + Vector3(
+		var decay: float = shake_timer / shake_duration
+		var intensity: float = shake_intensity * decay
+		current_shake_offset = Vector3(
 			randf_range(-intensity, intensity),
 			randf_range(-intensity, intensity),
 			randf_range(-intensity * 0.5, intensity * 0.5)
 		)
-		if shake_timer <= 0:
-			camera.position = shake_base_pos
+	else:
+		current_shake_offset = Vector3.ZERO
 	
 	# Screen flash
 	if flash_timer > 0 and flash_node:
@@ -59,10 +60,12 @@ func _process(delta: float) -> void:
 func shake(intensity: float, duration: float) -> void:
 	if not camera:
 		return
-	shake_intensity = intensity
-	shake_duration = duration
-	shake_timer = duration
-	shake_base_pos = camera.position
+	# If a shake is already running, take the stronger one rather than
+	# stacking (prevents runaway intensity from rapid hit sequences).
+	if intensity > shake_intensity or shake_timer <= 0.0:
+		shake_intensity = intensity
+		shake_duration = duration
+		shake_timer = duration
 
 func flash(color: Color, duration: float) -> void:
 	if not flash_node:

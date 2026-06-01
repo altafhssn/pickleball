@@ -52,6 +52,9 @@ const PLAYER_RIGHT: float = 0.5
 const PLAYER_BASELINE: float = -0.8
 const OPPONENT_BASELINE: float = 0.8
 
+# Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
+var camera_base_pos: Vector3 = Vector3.ZERO
+
 func _ready():
 	EventBus.swipe_detected.connect(_on_swipe_detected)
 	EventBus.tap_detected.connect(_on_tap_detected)
@@ -68,8 +71,9 @@ func _ready():
 	ball.ball_landed.connect(_on_ball_landed)
 	ball.ball_hit_net.connect(_on_ball_hit_net)
 	
-	# Initialize game feel
+	# Initialize game feel and capture the authored camera position as our base.
 	game_feel.setup(camera, hud)
+	camera_base_pos = camera.position
 	
 	# Connect hit VFX
 	EventBus.ball_hit.connect(_spawn_hit_vfx)
@@ -299,12 +303,12 @@ func _predict_ball_landing() -> Vector3:
 	return Vector3(pos.x + vel.x * t, 0.0, pos.z + vel.z * t)
 
 func _update_camera() -> void:
-	var target_z = ball.position.z * 0.3
-	if is_doubles:
-		# Slightly wider camera for doubles
-		camera.position.z = move_toward(camera.position.z, 2.8 + target_z, 0.5)
-	else:
-		camera.position.z = move_toward(camera.position.z, 2.5 + target_z, 0.5)
+	# Smoothly follow the ball's z without ever writing camera.position
+	# directly; GameFeel adds shake on top.
+	var target_z: float = ball.position.z * 0.3
+	var dest_z: float = (2.8 if is_doubles else 2.5) + target_z
+	camera_base_pos.z = move_toward(camera_base_pos.z, dest_z, 0.05)
+	camera.position = camera_base_pos + game_feel.current_shake_offset
 
 # === POWER METER ===
 
