@@ -133,31 +133,35 @@ func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vecto
 	has_bounced_this_side = false
 	rest_fired = false
 
-	# Speed and arc tuned per shot type. Net is ~0.16 tall, court half-length
-	# is ~0.8 from baseline-ish position to net — without enough vertical
-	# direction the ball clips the net or hits the floor first, especially
-	# for slow dinks. Enforce a minimum arc here so callers can't underfly.
+	# Speed and arc tuned for the actual court: hitters sit at z ≈ ±0.8, the
+	# net is at z=0 and 0.16 tall. Distance to net is short so the ball has
+	# very little time to climb — flat shots from a low ball position clip
+	# the net unless we enforce a healthy arc.
+	#
+	# These constants were chosen by trajectory-checking each shot type
+	# against gravity (9.8) and the actual court geometry, picking values
+	# that clear the net AND land in-bounds on the opposite side.
 	var dir: Vector3 = direction
 	var shot_speed: float = base_speed * force
 	match shot:
 		ShotType.DINK:
-			shot_speed = 2.5 + (force * 1.0)         # Slow & arced: 2.5–3.5
-			dir.y = maxf(dir.y, 0.55)
+			shot_speed = 3.0 + (force * 1.0)         # Slow & arced: 3.0–4.0
+			dir.y = maxf(dir.y, 1.0)                 # High arc — lands in kitchen
 		ShotType.DRIVE:
-			shot_speed = 4.0 + (force * 3.0)         # Fast: 4–7
-			dir.y = maxf(dir.y, 0.20)
+			shot_speed = 4.0 + (force * 2.0)         # Fast but in bounds: 4–6
+			dir.y = maxf(dir.y, 0.35)
 		ShotType.LOB:
-			shot_speed = 3.0 + (force * 1.5)         # Medium: 3–4.5
-			dir.y = 0.7 + (force * 0.3)              # High arc — overrides
+			shot_speed = 3.5 + (force * 1.5)         # Medium: 3.5–5
+			dir.y = 1.5 + (force * 0.5)              # Very high arc — overrides
 		ShotType.VOLLEY:
-			shot_speed = 3.0 + (force * 3.0)         # Fast: 3–6
-			dir.y = maxf(dir.y, 0.15)
+			shot_speed = 3.5 + (force * 2.5)         # Fast: 3.5–6
+			dir.y = maxf(dir.y, 0.30)
 		ShotType.ERNE:
-			shot_speed = 4.0 + (force * 2.5)         # Fast: 4–6.5
-			dir.y = maxf(dir.y, 0.25)
+			shot_speed = 4.0 + (force * 2.0)
+			dir.y = maxf(dir.y, 0.40)
 		ShotType.ATP:
-			shot_speed = 2.5 + (force * 3.0)         # Varied: 2.5–5.5
-			dir.y = maxf(dir.y, 0.25)
+			shot_speed = 3.0 + (force * 2.0)
+			dir.y = maxf(dir.y, 0.35)
 
 	linear_velocity = dir.normalized() * shot_speed
 

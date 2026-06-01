@@ -360,12 +360,17 @@ func _update_player_auto_move(delta: float) -> void:
 			if ball.position.x < 0:
 				opp_target_z = clampf(ball.position.z - 0.1, 0.55, 1.3)
 
-	player.position.x = move_toward(player.position.x, player_target_x if is_doubles else 0.0, delta * 2.0)
-	player.position.z = move_toward(player.position.z, player_target_z, delta * 2.0)
+	# Bumped move rate — ball travels at 3–6 units/sec, characters need to
+	# keep up or the AI looks like it's standing still while the ball flies
+	# past. Real pickleball is fast; characters being slightly faster than
+	# the ball isn't unrealistic at this scale.
+	var move_rate: float = delta * 4.0
+	player.position.x = move_toward(player.position.x, player_target_x if is_doubles else 0.0, move_rate)
+	player.position.z = move_toward(player.position.z, player_target_z, move_rate)
 
 	if not is_doubles:
-		opponent.position.x = move_toward(opponent.position.x, opp_target_x, delta * 2.0)
-		opponent.position.z = move_toward(opponent.position.z, opp_target_z, delta * 2.0)
+		opponent.position.x = move_toward(opponent.position.x, opp_target_x, move_rate)
+		opponent.position.z = move_toward(opponent.position.z, opp_target_z, move_rate)
 
 # Ballistic projection ignoring drag — close enough for AI positioning.
 # Solves y(t) = pos.y + vel.y*t - 0.5*g*t² = 0 for t > 0.
