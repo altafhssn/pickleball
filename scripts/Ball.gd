@@ -96,7 +96,20 @@ func _on_body_entered(body: Node) -> void:
 		ball_landed.emit(global_position, side)
 		EventBus.ball_bounced.emit(global_position, side)
 
+func hold_for_serve(at_position: Vector3) -> void:
+	# Park the ball mid-air for the serve setup. Freeze so gravity doesn't
+	# drop it while the server (or the user) is preparing.
+	global_position = at_position
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	spin_vector = Vector3.ZERO
+	has_bounced_this_side = false
+	rest_fired = false
+	is_in_play = false
+	freeze = true
+
 func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0) -> void:
+	freeze = false
 	global_position = from_position
 	is_in_play = true
 	has_bounced_this_side = false
@@ -149,6 +162,7 @@ func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vecto
 	linear_velocity = dir.normalized() * shot_speed
 
 func reset() -> void:
+	freeze = false
 	is_in_play = false
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO

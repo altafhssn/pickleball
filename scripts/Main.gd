@@ -475,8 +475,7 @@ func _on_serve_ready(server_id: int, _side: int) -> void:
 	if is_player_serving:
 		player_serve_ready = true
 		hud.show_serve_indicator("Your serve — Swipe up to serve")
-		ball.reset()
-		ball.position = Vector3(0, 0.5, PLAYER_BASELINE + 0.05)
+		ball.hold_for_serve(Vector3(0, 0.5, PLAYER_BASELINE + 0.05))
 	else:
 		hud.show_serve_indicator("Opponent serving...")
 		_reset_for_ai_serve()
@@ -491,27 +490,22 @@ func _on_doubles_serve_ready(server_team: int, server_pos: int, _side: int) -> v
 		var serve_x = PLAYER_LEFT if server_pos == 0 else PLAYER_RIGHT
 		var player_name = "Your" if server_pos == 0 else "Partner's"
 		hud.show_serve_indicator(player_name + " serve — Swipe up to serve")
-		ball.reset()
-		ball.position = Vector3(serve_x, 0.5, PLAYER_BASELINE + 0.05)
+		ball.hold_for_serve(Vector3(serve_x, 0.5, PLAYER_BASELINE + 0.05))
 	else:
 		hud.show_serve_indicator("Opponent team serving...")
 		_reset_for_doubles_ai_serve(server_pos)
 
 func _reset_for_ai_serve() -> void:
-	ball.reset()
-	ball.position = Vector3(0, 0.5, OPPONENT_BASELINE - 0.05)
-	ball.is_in_play = true
-	
+	ball.hold_for_serve(Vector3(0, 0.5, OPPONENT_BASELINE - 0.05))
+
 	await get_tree().create_timer(0.8).timeout
 	if not match_manager.match_complete:
 		_ai_serve()
 
 func _reset_for_doubles_ai_serve(server_pos: int) -> void:
 	var serve_x = PLAYER_RIGHT if server_pos == 0 else PLAYER_LEFT
-	ball.reset()
-	ball.position = Vector3(serve_x, 0.5, OPPONENT_BASELINE - 0.05)
-	ball.is_in_play = true
-	
+	ball.hold_for_serve(Vector3(serve_x, 0.5, OPPONENT_BASELINE - 0.05))
+
 	await get_tree().create_timer(0.8).timeout
 	if not doubles_manager.match_complete:
 		_doubles_ai_serve(server_pos)
