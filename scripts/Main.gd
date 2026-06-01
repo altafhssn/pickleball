@@ -57,6 +57,9 @@ var camera_base_pos: Vector3 = Vector3.ZERO
 
 # Rally end-condition tracking
 var bounces_since_last_hit: int = 0
+# Used to enforce the two-bounce rule (until 2 total bounces, every hit must
+# follow a bounce) and to flag serve faults on the first bounce.
+var total_bounces_in_rally: int = 0
 # Court extends x ∈ [-1.0, 1.0] (sidelines), z ∈ [-1.5, 1.5] (baselines).
 # Allow a small "in" margin so close shots don't get incorrectly called out.
 const OUT_X_LIMIT: float = 1.05
@@ -396,8 +399,11 @@ func release_power_shot() -> void:
 	is_charging = false
 	hud.show_power_meter(false)
 	power_meter_visible = false
-	
+
 	if power_charge > 0.1 and rally_active and ball.position.z < 0 and ball.is_in_play:
+		if _is_two_bounce_violation():
+			_two_bounce_fault(0, "Power shot before two bounces")
+			return
 		# Player is at -z, opponent at +z. Shots fly in +z direction.
 		var direction = Vector3(0, 0.1, 1.0).normalized()
 		ball.hit(power_charge, direction, BallRef.ShotType.DRIVE)
@@ -622,6 +628,9 @@ func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	hud.show_gesture_guide(true)
 
 func _handle_player_shot(swipe_dir: String, velocity: Vector2) -> void:
+	if _is_two_bounce_violation():
+		_two_bounce_fault(0, "Volley before two bounces")
+		return
 	var power = clampf(velocity.length() / 400.0, 0.3, 1.0)
 	var shot_type: int
 	var direction: Vector3
@@ -660,9 +669,12 @@ func _on_tap_detected(_position: Vector2) -> void:
 	
 	# Tap = volley if ball on player side and in air
 	if rally_active and ball.position.z < 0 and ball.position.y > 0.1 and ball.is_in_play:
+		if _is_two_bounce_violation():
+			_two_bounce_fault(0, "Volley before two bounces")
+			return
 		var power = 0.7
 		var direction = Vector3(0, -0.1, 1.0).normalized()
-		
+
 		if match_manager.check_kitchen_violation(player.position, true):
 			EventBus.kitchen_violation.emit(0)
 			if is_doubles:
@@ -698,12 +710,21 @@ func _on_drag(from: Vector2, to: Vector2) -> void:
 func _on_ai_shot_selected(shot_type: int, direction: Vector3, force: float) -> void:
 	if not rally_active:
 		return
-	
+
+	# AI hit ID: 1 in singles, 1 or 3 in doubles (opponent partner).
+	var ai_hitter_id: int = 1
+	if is_doubles and ball.last_hitter_id == 3:
+		ai_hitter_id = 3
+
+	if _is_two_bounce_violation():
+		_two_bounce_fault(ai_hitter_id, "Opponent volleyed before two bounces")
+		return
+
 	# Use the correct opponent character for kitchen check (doubles support)
 	var hitter: Node3D = opponent
 	if is_doubles and ball.last_hitter_id == 3:
 		hitter = opponent_partner
-	
+
 	if match_manager.check_kitchen_violation(hitter.position, false):
 		EventBus.kitchen_violation.emit(1)
 		if is_doubles:
@@ -721,12 +742,70 @@ func _on_ai_shot_selected(shot_type: int, direction: Vector3, force: float) -> v
 
 # === BALL EVENTS ===
 
-func _on_ball_landed(_position: Vector3, _side: int) -> void:
+func _on_ball_landed(position: Vector3, _side: int) -> void:
 	if not rally_active:
 		return
 	bounces_since_last_hit += 1
+	total_bounces_in_rally += 1
+
+	# First bounce of a point is always the serve landing. Validate it.
+	if total_bounces_in_rally == 1:
+		if _is_serve_fault(position):
+			return  # _serve_fault already ended the rally
+
 	if bounces_since_last_hit >= 2:
 		_end_rally_double_bounce()
+
+# Returns true (and ends the rally) if the serve landed illegally.
+func _is_serve_fault(pos: Vector3) -> bool:
+	var server_id: int = ball.last_hitter_id
+	# Player team (ids 0 & 2) lives at -z; opponent team (1 & 3) at +z.
+	var server_is_player_team: bool = server_id == 0 or server_id == 2
+	var ball_z: float = pos.z
+
+	# Serve must clear the net (land on the opposite side).
+	if server_is_player_team and ball_z < 0:
+		_serve_fault(server_id, "Serve in own court")
+		return true
+	if not server_is_player_team and ball_z > 0:
+		_serve_fault(server_id, "Serve in own court")
+		return true
+
+	# Serve cannot land in the no-volley zone (|z| ≤ 0.48).
+	if absf(ball_z) <= 0.48:
+		_serve_fault(server_id, "Serve into kitchen")
+		return true
+
+	return false
+
+func _serve_fault(server_id: int, reason: String) -> void:
+	if not rally_active:
+		return
+	rally_active = false
+	if is_doubles:
+		var loser_team: int = 0 if server_id == 0 or server_id == 2 else 1
+		doubles_manager.award_point_from_rally(loser_team, reason)
+	else:
+		# award_point_from_rally takes loser id; the server is the loser.
+		match_manager.award_point_from_rally(server_id, reason)
+
+# Returns true if the attempted hit violates the two-bounce rule.
+func _is_two_bounce_violation() -> bool:
+	if total_bounces_in_rally >= 2:
+		return false  # Volleys legal once both required bounces have happened
+	if bounces_since_last_hit < 1:
+		return true   # Trying to hit before the required bounce
+	return false
+
+func _two_bounce_fault(hitter_id: int, reason: String) -> void:
+	if not rally_active:
+		return
+	rally_active = false
+	if is_doubles:
+		var loser_team: int = 0 if hitter_id == 0 or hitter_id == 2 else 1
+		doubles_manager.award_point_from_rally(loser_team, reason)
+	else:
+		match_manager.award_point_from_rally(hitter_id, reason)
 
 func _on_any_ball_hit_for_rally_tracking(_shooter_id: int, _shot_type: int, _force: float) -> void:
 	bounces_since_last_hit = 0
@@ -935,6 +1014,7 @@ func _challenge_report_ace() -> void:
 func _reset_rally() -> void:
 	rally_active = false
 	bounces_since_last_hit = 0
+	total_bounces_in_rally = 0
 	match_manager.reset_rally()
 	ball.reset()
 	ball.position = Vector3(0, 0.05, 0)
