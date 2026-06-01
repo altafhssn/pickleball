@@ -82,6 +82,9 @@ func _ready():
 	# Initialize game feel and capture the authored camera position as our base.
 	game_feel.setup(camera, hud)
 	camera_base_pos = camera.position
+
+	# Team coloring so the player can tell themselves apart from the AI.
+	_apply_team_colors()
 	
 	# Connect hit VFX
 	EventBus.ball_hit.connect(_spawn_hit_vfx)
@@ -213,6 +216,26 @@ func _start_practice_match() -> void:
 	
 	_update_camera()
 
+const PLAYER_TEAM_COLOR := Color(0.25, 0.55, 1.0)   # Blue — that's you.
+const OPPONENT_TEAM_COLOR := Color(1.0, 0.45, 0.15)  # Orange — the AI.
+
+func _apply_team_colors() -> void:
+	_tint_character(player, PLAYER_TEAM_COLOR)
+	_tint_character(player_partner, PLAYER_TEAM_COLOR)
+	_tint_character(opponent, OPPONENT_TEAM_COLOR)
+	_tint_character(opponent_partner, OPPONENT_TEAM_COLOR)
+
+func _tint_character(character: Node3D, color: Color) -> void:
+	if character == null:
+		return
+	var body: MeshInstance3D = character.get_node_or_null("Body") as MeshInstance3D
+	if body == null:
+		return
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.5
+	body.material_override = mat
+
 func _hide_doubles_characters() -> void:
 	is_doubles = false
 	if player_partner:
@@ -247,6 +270,7 @@ func _process(delta: float) -> void:
 	_update_screen_effects(delta)
 	_update_camera()
 	_check_ball_out_of_bounds()
+	_update_turn_indicator()
 
 	# Make characters look toward the ball each frame
 	_update_characters_look_at_ball()
@@ -535,7 +559,7 @@ func _handle_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	rally_active = true
 	game_state.transition_to(GameStateRef.State.PLAY)
 	hud.show_serve_indicator("")
-	hud.show_gesture_guide(false)
+	hud.show_gesture_guide(true)
 
 func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	if swipe_dir != "up":
@@ -567,7 +591,7 @@ func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	rally_active = true
 	game_state.transition_to(GameStateRef.State.PLAY)
 	hud.show_serve_indicator("")
-	hud.show_gesture_guide(false)
+	hud.show_gesture_guide(true)
 
 func _handle_player_shot(swipe_dir: String, velocity: Vector2) -> void:
 	var power = clampf(velocity.length() / 400.0, 0.3, 1.0)
@@ -703,6 +727,14 @@ func _end_rally_out_of_bounds() -> void:
 		# to whichever side the ball ended up on.
 		var loser_id: int = hitter if hitter >= 0 else (0 if ball.position.z < 0 else 1)
 		match_manager.award_point_from_rally(loser_id, "Out of bounds")
+
+func _update_turn_indicator() -> void:
+	if not rally_active or not ball.is_in_play:
+		return
+	if ball.position.z < 0:
+		hud.show_serve_indicator("Your turn — swipe!")
+	else:
+		hud.show_serve_indicator("")
 
 func _check_ball_out_of_bounds() -> void:
 	if not rally_active or not ball.is_in_play:
