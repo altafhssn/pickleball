@@ -1000,7 +1000,12 @@ func _update_turn_indicator() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
 	if ball.position.z < 0:
-		hud.show_serve_indicator("Your turn — swipe!")
+		# Ball on player's side. If we're in the two-bounce phase and the
+		# ball hasn't bounced on our side yet, warn the user not to volley.
+		if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
+			hud.show_serve_indicator("Wait for the bounce…")
+		else:
+			hud.show_serve_indicator("Your turn — swipe!")
 	else:
 		hud.show_serve_indicator("")
 

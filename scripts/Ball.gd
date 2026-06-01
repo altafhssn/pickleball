@@ -12,10 +12,12 @@ enum ShotType { DINK, DRIVE, LOB, VOLLEY, ERNE, ATP }
 @export var base_speed: float = 5.0
 @export var max_speed: float = 12.0
 @export var spin_factor: float = 0.3
-# Quadratic drag dominates at high speeds; linear drag handles the slow,
-# floaty tail so the wiffle ball decelerates the way it should.
-@export var drag_coefficient: float = 0.08
-@export var linear_drag: float = 0.45
+# Quadratic drag only — linear was overkill and made shots die in flight.
+# With mass 0.5 and these constants, a 5 m/s shot loses ~0.5 m/s over a
+# typical 0.5s flight, which feels right without breaking the projectile
+# math used by Ball.serve().
+@export var drag_coefficient: float = 0.02
+@export var linear_drag: float = 0.0
 # Ball stops when it's basically at rest on the floor — avoids endless
 # micro-bouncing after a dink lands.
 @export var rest_speed_threshold: float = 0.35
