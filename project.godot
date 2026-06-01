@@ -1,54 +1,67 @@
-; Engine: Godot 4.6.2
-; Project: Pickleball Smash
-; Studio: Straw Hat Studio
-; Mobile 3D Real-Time PvP Pickleball Game
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
 
 [application]
+
 config/name="Pickleball Smash"
 config/description="The fastest-growing sport, now in your pocket."
 config/version="0.1.0"
 config/tags=PackedStringArray("pickleball", "sports", "multiplayer", "mobile", "3d")
 run/main_scene="res://scenes/Main.tscn"
-boot_splash/image=""
+config/features=PackedStringArray("4.6")
 boot_splash/fullsize=true
-boot_splash/use_filter=true
+
+[autoload]
+
+EventBus="*res://scripts/EventBus.gd"
+AudioManager="*res://scripts/AudioManager.gd"
+PlayerData="*res://scripts/PlayerData.gd"
+ScreenTransition="*res://scenes/UI/ScreenTransition.tscn"
 
 [display]
+
 window/size/viewport_width=1080
 window/size/viewport_height=1920
 window/size/mode=2
-window/size/transparent=false
-window/handheld/orientation=1
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
-window/dpi/allow_hidpi=true
+window/handheld/orientation=1
 
-[rendering]
-renderer/rendering_method="mobile"
-renderer/rendering_method.mobile="mobile"
-renderer/texture_filters/default=1
-renderer/anti_aliasing/quality=0
-rendering/anti_aliasing/quality/msaa=1
-shaders/overrides/mobile_fxaa=true
+[dotnet]
 
-[physics]
-3d/run_on_separate_thread=true
+project/assembly_name="Pickleball Smash"
 
 [input]
+
 ui_accept={
 "deadzone": 0.5,
 "events": []
 }
 touch/enable_press_and_hold=true
 
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
 [memory]
+
 limits/multimesh/allocate_instances_per_frame=500
 
-[dotnet]
-project/assembly_name="Pickleball Smash"
+[physics]
 
-[autoload]
-EventBus="*res://scripts/EventBus.gd"
-AudioManager="*res://scripts/AudioManager.gd"
-PlayerData="*res://scripts/PlayerData.gd"
-ScreenTransition="*res://scenes/UI/ScreenTransition.tscn"
+3d/run_on_separate_thread=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/texture_filters/default=1
+renderer/anti_aliasing/quality=0
+rendering/anti_aliasing/quality/msaa=1
+shaders/overrides/mobile_fxaa=true
