@@ -571,7 +571,7 @@ func release_power_shot() -> void:
 
 	if power_charge > 0.1 and rally_active and ball.position.z < 0 and ball.is_in_play:
 		if _is_two_bounce_violation():
-			_two_bounce_fault(0, "Power shot before two bounces")
+			hud.show_message("Wait for the bounce!")
 			return
 		# Player is at -z, opponent at +z. Shots fly in +z direction.
 		var direction = Vector3(0, 0.1, 1.0).normalized()
@@ -789,7 +789,10 @@ func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 
 func _handle_player_shot(swipe_dir: String, velocity: Vector2) -> void:
 	if _is_two_bounce_violation():
-		_two_bounce_fault(0, "Volley before two bounces")
+		# Don't fault — just ignore the press so a panic-swipe doesn't
+		# instantly lose the point. The HUD already shows
+		# "Wait for the bounce…" while we're in this phase.
+		hud.show_message("Wait for the bounce!")
 		return
 	var power = clampf(velocity.length() / 400.0, 0.3, 1.0)
 	var shot_type: int
@@ -830,17 +833,13 @@ func _on_tap_detected(_position: Vector2) -> void:
 	# Tap = volley if ball on player side and in air
 	if rally_active and ball.position.z < 0 and ball.position.y > 0.1 and ball.is_in_play:
 		if _is_two_bounce_violation():
-			_two_bounce_fault(0, "Volley before two bounces")
+			hud.show_message("Wait for the bounce!")
 			return
 		var power = 0.7
 		var direction = Vector3(0, -0.1, 1.0).normalized()
 
 		if match_manager.check_kitchen_violation(player.position, true):
-			EventBus.kitchen_violation.emit(0)
-			if is_doubles:
-				doubles_manager.award_point_from_rally(0, "Kitchen violation")
-			else:
-				match_manager.award_point_from_rally(0, "Kitchen violation")
+			hud.show_message("No volleying from the kitchen!")
 			return
 		
 		ball.hit(power, direction, BallRef.ShotType.VOLLEY)
