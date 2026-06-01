@@ -115,14 +115,23 @@ func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0)
 	has_bounced_this_side = false
 	rest_fired = false
 	shot_type = ShotType.DRIVE
-	
-	# Calculate launch velocity toward target
-	var direction: Vector3 = (target_position - from_position).normalized()
-	var speed: float = base_speed * power
-	linear_velocity = direction * speed
-	
-	# Add slight upward angle for net clearance
-	linear_velocity.y = linear_velocity.length() * 0.15
+
+	# Solve projectile motion to land *exactly* at target_position.y = 0
+	# starting from from_position with a chosen flight time. Higher power
+	# = shorter flight time = flatter, faster serve.
+	var flight_time: float = lerpf(1.0, 0.55, clampf(power, 0.0, 1.0))
+	var g: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
+
+	# y(t) = from.y + vy*t - 0.5*g*t² = target.y
+	var vy: float = (target_position.y - from_position.y + 0.5 * g * flight_time * flight_time) / flight_time
+
+	# Horizontal — straight to target.
+	var dx: float = target_position.x - from_position.x
+	var dz: float = target_position.z - from_position.z
+	var vx: float = dx / flight_time
+	var vz: float = dz / flight_time
+
+	linear_velocity = Vector3(vx, vy, vz)
 
 func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vector3.ZERO) -> void:
 	if not is_in_play:
