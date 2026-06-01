@@ -76,9 +76,9 @@ func validate_serve(swing_direction: String, contact_height: float) -> bool:
 	return true
 
 func _is_in_kitchen(position: Vector3, _is_player_side: bool) -> bool:
-	# Kitchen (no-volley zone) extends 0.2 units from the net (z=0) on either side.
-	# Convention: player baseline z<0, opponent baseline z>0 (see Main.gd).
-	return absf(position.z) <= 0.2
+	# Kitchen (no-volley zone) extends 0.48 units from the net on either side,
+	# matching the painted kitchen lines in Court.tscn (z = ±0.48).
+	return absf(position.z) <= 0.48
 
 # === EVENT HANDLERS ===
 

@@ -37,6 +37,13 @@ size = Vector3(0.02, 0.005, 1.02)
 albedo_color = Color(0.95, 0.95, 0.95, 0.8)
 transparency = 1
 
+[sub_resource type="BoxMesh" id="BoxMesh_kitchen"]
+size = Vector3(2.0, 0.002, 0.96)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kitchen"]
+albedo_color = Color(0.85, 0.62, 0.32, 0.55)
+transparency = 1
+
 [sub_resource type="Environment" id="Environment_1e7qf"]
 ambient_light_color = Color(0.4, 0.4, 0.5, 1)
 tonemap_mode = 0
@@ -55,6 +62,11 @@ shape = SubResource("BoxShape3D_fmb0u")
 mesh = SubResource("BoxMesh_3cx0g")
 surface_material_override/0 = SubResource("StandardMaterial3D_c3kl0")
 position = Vector3(0, -0.025, 0)
+
+[node name="KitchenTint" type="MeshInstance3D" parent="."]
+mesh = SubResource("BoxMesh_kitchen")
+surface_material_override/0 = SubResource("StandardMaterial3D_kitchen")
+position = Vector3(0, 0.0015, 0)
 
 [node name="LineMarkings" type="Node3D" parent="."]
 

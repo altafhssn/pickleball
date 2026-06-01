@@ -57,9 +57,10 @@ var camera_base_pos: Vector3 = Vector3.ZERO
 
 # Rally end-condition tracking
 var bounces_since_last_hit: int = 0
-# Court is roughly x ∈ [-0.5, 0.5], z ∈ [-0.9, 0.9]; small margins beyond.
-const OUT_X_LIMIT: float = 0.6
-const OUT_Z_LIMIT: float = 1.0
+# Court extends x ∈ [-1.0, 1.0] (sidelines), z ∈ [-1.5, 1.5] (baselines).
+# Allow a small "in" margin so close shots don't get incorrectly called out.
+const OUT_X_LIMIT: float = 1.05
+const OUT_Z_LIMIT: float = 1.55
 const FLOOR_Y_LIMIT: float = -0.3
 
 func _ready():
@@ -219,6 +220,18 @@ func _start_practice_match() -> void:
 const PLAYER_TEAM_COLOR := Color(0.25, 0.55, 1.0)   # Blue — that's you.
 const OPPONENT_TEAM_COLOR := Color(1.0, 0.45, 0.15)  # Orange — the AI.
 
+func _announce_shot(shot_type: int) -> void:
+	var name: String = ""
+	match shot_type:
+		BallRef.ShotType.DINK: name = "Dink!"
+		BallRef.ShotType.DRIVE: name = "Drive!"
+		BallRef.ShotType.LOB: name = "Lob!"
+		BallRef.ShotType.VOLLEY: name = "Volley!"
+		BallRef.ShotType.ERNE: name = "Erne!"
+		BallRef.ShotType.ATP: name = "ATP!"
+	if name != "":
+		hud.show_message(name)
+
 func _apply_team_colors() -> void:
 	_tint_character(player, PLAYER_TEAM_COLOR)
 	_tint_character(player_partner, PLAYER_TEAM_COLOR)
@@ -285,32 +298,35 @@ func _update_player_auto_move(delta: float) -> void:
 		# Predict where the ball will land (or current position if already low).
 		var landing: Vector3 = _predict_ball_landing()
 
+		# Player movement clamps to [-1.3, -0.55] — between back baseline and
+		# just outside the kitchen line, so the auto-mover never parks the
+		# player inside the no-volley zone.
 		if ball.position.z < 0:
 			# Ball on player's side
 			if is_doubles:
 				if ball.position.x < 0:
-					player_target_z = clampf(ball.position.z + 0.1, -0.9, -0.1)
+					player_target_z = clampf(ball.position.z + 0.1, -1.3, -0.55)
 					player_target_x = clampf(ball.position.x, -0.5, 0.0)
 				else:
 					player_target_z = PLAYER_BASELINE
 					player_target_x = PLAYER_LEFT
 			else:
-				player_target_z = clampf(ball.position.z + 0.1, -0.9, -0.1)
-			# Singles opponent: drift back toward kitchen line while ball is on player side.
+				player_target_z = clampf(ball.position.z + 0.1, -1.3, -0.55)
+			# Singles opponent: hold the kitchen line while ball is on player side.
 			if not is_doubles:
-				opp_target_z = 0.25
+				opp_target_z = 0.55
 				opp_target_x = move_toward(opponent.position.x, 0.0, delta * 1.5)
 		else:
 			# Ball on opponent's side — singles opponent moves to predicted landing.
 			if not is_doubles:
 				var lz: float = landing.z if landing.z > 0.05 else ball.position.z
 				var lx: float = landing.x if landing.z > 0.05 else ball.position.x
-				opp_target_z = clampf(lz + 0.08, 0.1, 0.9)
+				opp_target_z = clampf(lz + 0.08, 0.55, 1.3)
 				opp_target_x = clampf(lx, -0.4, 0.4)
 
 		if is_doubles and ball.position.z > 0:
 			if ball.position.x < 0:
-				opp_target_z = clampf(ball.position.z - 0.1, 0.1, 0.9)
+				opp_target_z = clampf(ball.position.z - 0.1, 0.55, 1.3)
 
 	player.position.x = move_toward(player.position.x, player_target_x if is_doubles else 0.0, delta * 2.0)
 	player.position.z = move_toward(player.position.z, player_target_z, delta * 2.0)
@@ -371,7 +387,8 @@ func release_power_shot() -> void:
 	power_meter_visible = false
 	
 	if power_charge > 0.1 and rally_active and ball.position.z < 0 and ball.is_in_play:
-		var direction = Vector3(0, 0.1, -1.0).normalized()
+		# Player is at -z, opponent at +z. Shots fly in +z direction.
+		var direction = Vector3(0, 0.1, 1.0).normalized()
 		ball.hit(power_charge, direction, BallRef.ShotType.DRIVE)
 		ball.last_hitter_id = 0
 		last_player_shot_type = BallRef.ShotType.DRIVE
@@ -598,27 +615,29 @@ func _handle_player_shot(swipe_dir: String, velocity: Vector2) -> void:
 	var shot_type: int
 	var direction: Vector3
 	
+	# Player at -z, opponent at +z. All shots fire toward +z (opponent's side).
 	match swipe_dir:
 		"up":
 			shot_type = BallRef.ShotType.LOB
-			direction = Vector3(0, 0.7, -1.0).normalized()
+			direction = Vector3(0, 0.7, 1.0).normalized()
 		"down":
 			shot_type = BallRef.ShotType.DINK
-			direction = Vector3(0, 0.3, -0.8).normalized()
+			direction = Vector3(0, 0.3, 0.8).normalized()
 		"left":
 			shot_type = BallRef.ShotType.DRIVE
-			direction = Vector3(-0.5, 0.1, -0.9).normalized()
+			direction = Vector3(-0.5, 0.1, 0.9).normalized()
 		"right":
 			shot_type = BallRef.ShotType.DRIVE
-			direction = Vector3(0.5, 0.1, -0.9).normalized()
+			direction = Vector3(0.5, 0.1, 0.9).normalized()
 		_:
 			shot_type = BallRef.ShotType.DRIVE
-			direction = Vector3(0, 0.2, -1.0).normalized()
+			direction = Vector3(0, 0.2, 1.0).normalized()
 	
 	ball.hit(power, direction, shot_type)
 	ball.last_hitter_id = 0
 	last_player_shot_type = shot_type
 	EventBus.ball_hit.emit(0, shot_type, power)
+	_announce_shot(shot_type)
 	if match_manager:
 		match_manager.record_hit()
 
@@ -631,7 +650,7 @@ func _on_tap_detected(_position: Vector2) -> void:
 	# Tap = volley if ball on player side and in air
 	if rally_active and ball.position.z < 0 and ball.position.y > 0.1 and ball.is_in_play:
 		var power = 0.7
-		var direction = Vector3(0, -0.1, -1.0).normalized()
+		var direction = Vector3(0, -0.1, 1.0).normalized()
 		
 		if match_manager.check_kitchen_violation(player.position, true):
 			EventBus.kitchen_violation.emit(0)
@@ -645,6 +664,7 @@ func _on_tap_detected(_position: Vector2) -> void:
 		ball.last_hitter_id = 0
 		last_player_shot_type = BallRef.ShotType.VOLLEY
 		EventBus.ball_hit.emit(0, BallRef.ShotType.VOLLEY, power)
+		_announce_shot(BallRef.ShotType.VOLLEY)
 		match_manager.record_hit()
 
 func _on_double_tap(_position: Vector2) -> void:
@@ -656,7 +676,7 @@ func _on_drag(from: Vector2, to: Vector2) -> void:
 		var drag_vector = to - from
 		var power = clampf(drag_vector.length() / 500.0, 0.3, 0.9)
 		var target_x = clampf((to.x - 540) / 540.0, -0.5, 0.5)
-		var direction = Vector3(target_x, 0.3, -0.9).normalized()
+		var direction = Vector3(target_x, 0.3, 0.9).normalized()
 		ball.hit(power, direction, BallRef.ShotType.DRIVE)
 		ball.last_hitter_id = 0
 		EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, power)
