@@ -284,7 +284,7 @@ func _process_serve_input(_delta: float) -> void:
 	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
 	if game_state.can_serve() and is_player_serving and player_serve_ready:
 		if space_now and not was_serve_space_pressed:
-			_launch_player_serve(0.8)
+			_launch_player_serve(0.65)
 	was_serve_space_pressed = space_now
 
 func _process_rally_input() -> void:
@@ -325,13 +325,13 @@ func _player_swing_with_shot(shot_type: int) -> void:
 	var power: float
 	if dist < PERFECT_DIST:
 		hud.show_message("✦ PERFECT! ✦", Color(0.2, 1.0, 0.4))
-		power = 1.0
+		power = 0.85
 	elif dist < GOOD_DIST:
 		hud.show_message("GOOD!", Color(1.0, 0.95, 0.2))
-		power = 0.85
+		power = 0.7
 	else:
 		hud.show_message("OK", Color(1.0, 0.6, 0.2))
-		power = 0.65
+		power = 0.5
 	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.18, 0.18), -1.2, 1.2)
 	var target_z: float
 	match shot_type:
@@ -384,7 +384,7 @@ func _ai_swing() -> void:
 	var target_x: float = clampf(-ball.position.x * 0.5 + randf_range(-0.45, 0.45), -1.2, 1.2)
 	var target_z: float = PLAYER_BASELINE + randf_range(0.3, 0.9)
 	var target := Vector3(target_x, 0, target_z)
-	ball.serve(ball.position, target, 0.75)
+	ball.serve(ball.position, target, 0.6)
 	ball.last_hitter_id = 1
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.75)
 	match_manager.record_hit()
@@ -490,7 +490,7 @@ func _set_touch_shot_buttons_visible(yes: bool) -> void:
 
 func _on_touch_serve() -> void:
 	if game_state.can_serve() and is_player_serving and player_serve_ready:
-		_launch_player_serve(0.8)
+		_launch_player_serve(0.65)
 
 func _on_touch_lob() -> void:
 	_touch_hit(BallRef.ShotType.LOB)
@@ -886,7 +886,7 @@ func _reset_for_doubles_ai_serve(server_pos: int) -> void:
 func _ai_serve() -> void:
 	# Center-ish target on the player's side, past their kitchen line.
 	var target = Vector3(randf_range(-0.5, 0.5), 0, PLAYER_BASELINE + 0.45)
-	ball.serve(ball.position, target, 0.7)
+	ball.serve(ball.position, target, 0.55)
 	ball.last_hitter_id = 1
 	EventBus.ball_served.emit(ball.position, target)
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.6)
@@ -945,7 +945,7 @@ func _handle_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 
 	# Wii-Sports mobile swipe-serve: ignore velocity/direction details,
 	# just commit a default-power serve.
-	_launch_player_serve(0.8)
+	_launch_player_serve(0.65)
 
 func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	if swipe_dir != "up":

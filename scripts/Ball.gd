@@ -132,8 +132,9 @@ func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0)
 
 	# Solve projectile motion to land *exactly* at target_position.y = 0
 	# starting from from_position with a chosen flight time. Higher power
-	# = shorter flight time = flatter, faster serve.
-	var flight_time: float = lerpf(1.0, 0.55, clampf(power, 0.0, 1.0))
+	# = shorter flight time = flatter, faster shot. After the court scale
+	# bump, flight times stretched so the ball doesn't feel like a bullet.
+	var flight_time: float = lerpf(1.40, 0.90, clampf(power, 0.0, 1.0))
 	var g: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 	# y(t) = from.y + vy*t - 0.5*g*t² = target.y
