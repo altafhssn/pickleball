@@ -106,8 +106,8 @@ var ball_rest_timer: float = 0.0
 const BALL_REST_TIMEOUT: float = 0.8
 # Court extends x ∈ [-1.5, 1.5] (sidelines), z ∈ [-2.25, 2.25] (baselines).
 # Allow a small "in" margin so close shots don't get incorrectly called out.
-const OUT_X_LIMIT: float = 1.55
-const OUT_Z_LIMIT: float = 2.30
+const OUT_X_LIMIT: float = 1.70
+const OUT_Z_LIMIT: float = 2.55
 const FLOOR_Y_LIMIT: float = -0.3
 
 func _ready():
@@ -345,13 +345,13 @@ func _player_swing_with_shot(shot_type: int) -> void:
 	var flight_time: float
 	match shot_type:
 		BallRef.ShotType.LOB:
-			target_z = OPPONENT_BASELINE - randf_range(0.15, 0.4)
+			target_z = OPPONENT_BASELINE - randf_range(0.3, 0.55)   # safer depth
 			flight_time = 1.10
 		BallRef.ShotType.DINK:
-			target_z = randf_range(0.35, 0.85)
+			target_z = randf_range(0.4, 0.85)
 			flight_time = 0.90
 		_:
-			target_z = OPPONENT_BASELINE - randf_range(0.5, 0.95)
+			target_z = OPPONENT_BASELINE - randf_range(0.6, 1.0)   # comfortably in-court
 			flight_time = 0.70
 	var target := Vector3(target_x, 0, target_z)
 	ball.launch_at_target(ball.position, target, flight_time)
