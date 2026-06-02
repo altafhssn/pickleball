@@ -308,7 +308,13 @@ func _player_swing() -> void:
 # touch buttons. Computes the timing quality, shows feedback, applies a
 # power proportional to that quality.
 func _player_swing_with_shot(shot_type: int) -> void:
-	if not (rally_active and ball.is_in_play and ball.position.z < 0):
+	if not (rally_active and ball.is_in_play):
+		return
+	# Ball must be solidly on the player's side, not still passing over the
+	# net. The 0.1 margin treats anything within 10 cm of the net as "not
+	# yet on your side" — prevents the 'I swung but the ball was on the
+	# other court' feeling.
+	if ball.position.z > -0.1:
 		return
 	if ball.linear_velocity.z > 0.5:
 		return  # ball flying away, can't be hit
@@ -973,42 +979,19 @@ func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	hud.show_serve_indicator("")
 	hud.show_gesture_guide(true)
 
-func _handle_player_shot(swipe_dir: String, velocity: Vector2) -> void:
-	if _is_two_bounce_violation():
-		# Don't fault — just ignore the press so a panic-swipe doesn't
-		# instantly lose the point. The HUD already shows
-		# "Wait for the bounce…" while we're in this phase.
-		hud.show_message("Wait for the bounce!")
-		return
-	var power = clampf(velocity.length() / 400.0, 0.3, 1.0)
-	var shot_type: int
-	var direction: Vector3
-	
-	# Player at -z, opponent at +z. All shots fire toward +z (opponent's side).
+func _handle_player_shot(swipe_dir: String, _velocity: Vector2) -> void:
+	# Swipe direction picks the shot type; the rest (range check,
+	# timing-quality flash, power, target) is the unified swing path,
+	# so mouse swipes get the same gating as keyboard / touch buttons.
+	var shot_type: int = BallRef.ShotType.DRIVE
 	match swipe_dir:
 		"up":
 			shot_type = BallRef.ShotType.LOB
-			direction = Vector3(0, 0.7, 1.0).normalized()
 		"down":
 			shot_type = BallRef.ShotType.DINK
-			direction = Vector3(0, 0.3, 0.8).normalized()
-		"left":
-			shot_type = BallRef.ShotType.DRIVE
-			direction = Vector3(-0.5, 0.1, 0.9).normalized()
-		"right":
-			shot_type = BallRef.ShotType.DRIVE
-			direction = Vector3(0.5, 0.1, 0.9).normalized()
 		_:
 			shot_type = BallRef.ShotType.DRIVE
-			direction = Vector3(0, 0.2, 1.0).normalized()
-	
-	ball.hit(power, direction, shot_type)
-	ball.last_hitter_id = 0
-	last_player_shot_type = shot_type
-	EventBus.ball_hit.emit(0, shot_type, power)
-	_announce_shot(shot_type)
-	if match_manager:
-		match_manager.record_hit()
+	_player_swing_with_shot(shot_type)
 
 func _on_tap_detected(_position: Vector2) -> void:
 	# If charging, release power shot
