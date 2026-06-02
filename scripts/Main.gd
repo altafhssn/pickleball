@@ -538,16 +538,22 @@ func _update_swing_zone_ring() -> void:
 		return
 	swing_zone_ring.visible = true
 	swing_zone_ring.global_position = Vector3(player.position.x, 0.015, player.position.z)
-	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
+
+	# Two-bounce wait: ring is grey/dim, "don't hit yet" cue.
+	var awaiting_bounce: bool = total_bounces_in_rally < 2 and bounces_since_last_hit < 1
 	var color: Color
-	if dist < PERFECT_DIST:
-		color = Color(0.15, 1.0, 0.35, 1.0)        # green
-	elif dist < GOOD_DIST:
-		color = Color(1.0, 0.95, 0.2, 0.95)        # yellow
-	elif dist < PLAYER_HIT_RANGE:
-		color = Color(1.0, 0.55, 0.15, 0.9)        # orange
+	if awaiting_bounce:
+		color = Color(0.45, 0.45, 0.5, 0.55)   # grey: not yet hittable
 	else:
-		color = Color(1.0, 0.25, 0.25, 0.7)        # red
+		var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
+		if dist < PERFECT_DIST:
+			color = Color(0.15, 1.0, 0.35, 1.0)     # green
+		elif dist < GOOD_DIST:
+			color = Color(1.0, 0.95, 0.2, 0.95)     # yellow
+		elif dist < PLAYER_HIT_RANGE:
+			color = Color(1.0, 0.55, 0.15, 0.9)     # orange
+		else:
+			color = Color(1.0, 0.25, 0.25, 0.7)     # red
 	var mat: StandardMaterial3D = swing_zone_ring.material_override as StandardMaterial3D
 	mat.albedo_color = color
 	mat.emission = Color(color.r, color.g, color.b)
@@ -702,10 +708,10 @@ func _update_player_auto_move(delta: float) -> void:
 				player_target_x = clampf(ball.position.x * 0.3, -0.6, 0.6)
 				player_target_z = PLAYER_BASELINE
 
-	# Move rate per second. Wii-Sports auto-positioning wants characters to
-	# almost always reach the ball — they need to be slightly faster than
-	# the ball's horizontal pace.
-	var move_rate: float = delta * 6.0
+	# Move rate per second. Slowed enough that characters look like they
+	# RUN to the ball instead of teleporting. Realistic-ish: a quick
+	# pickleball player covers about half a court in a second.
+	var move_rate: float = delta * 3.5
 	player.position.x = move_toward(player.position.x, player_target_x, move_rate)
 	player.position.z = move_toward(player.position.z, player_target_z, move_rate)
 
@@ -1162,7 +1168,12 @@ func _update_turn_indicator() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
 	if ball.position.z < 0:
-		hud.show_serve_indicator("SPACE to swing!")
+		# Two-bounce phase: the ball has crossed to player's side after
+		# the AI's serve but hasn't bounced yet. Tell the user to wait.
+		if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
+			hud.show_serve_indicator("Wait for the bounce…")
+		else:
+			hud.show_serve_indicator("SPACE to swing!")
 	else:
 		hud.show_serve_indicator("")
 
