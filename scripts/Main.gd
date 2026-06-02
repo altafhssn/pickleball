@@ -53,8 +53,10 @@ const PLAYER_RIGHT: float = 0.5
 const PLAYER_BASELINE: float = -1.3
 const OPPONENT_BASELINE: float = 1.3
 
-# Wii-Sports-style one-button gameplay state.
-var was_space_pressed: bool = false
+# Wii-Sports-style one-button gameplay state. Two trackers because serve
+# and rally share the Space key and we want both to edge-detect cleanly.
+var was_serve_space_pressed: bool = false
+var was_rally_space_pressed: bool = false
 # AI auto-swing — fires after a brief reaction window once the ball is in
 # range of the AI character.
 var ai_ready_to_swing: bool = false
@@ -258,30 +260,21 @@ const OPPONENT_TEAM_COLOR := Color(1.0, 0.45, 0.15)  # Orange — the AI.
 
 func _process_serve_input(_delta: float) -> void:
 	# Wii-Sports serve: one tap of Space serves the ball. No aim, no charge.
-	if not (game_state.can_serve() and is_player_serving and player_serve_ready):
-		was_space_pressed = Input.is_key_pressed(KEY_SPACE)
-		return
-
 	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
-	if space_now and not was_space_pressed:
-		_launch_player_serve(0.8)
-	was_space_pressed = space_now
+	if game_state.can_serve() and is_player_serving and player_serve_ready:
+		if space_now and not was_serve_space_pressed:
+			_launch_player_serve(0.8)
+	was_serve_space_pressed = space_now
 
 func _process_rally_input() -> void:
 	# Wii-Sports rally swing: one tap of Space hits the ball when it's on
 	# the player's side. Whether the swing connects depends only on whether
 	# the ball is in PLAYER_HIT_RANGE of the character.
-	# (We don't double-handle Space during SERVE_WAIT — _process_serve_input
-	# owns that phase; here we only act if PLAY is active.)
-	if not (rally_active and ball.is_in_play and ball.position.z < 0):
-		return
-	# Avoid double-firing if both functions ran on the same Space-down.
-	if game_state.can_serve():
-		return
 	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
-	if space_now and not was_space_pressed:
-		_player_swing()
-	was_space_pressed = space_now
+	if rally_active and ball.is_in_play and ball.position.z < 0 and not game_state.can_serve():
+		if space_now and not was_rally_space_pressed:
+			_player_swing()
+	was_rally_space_pressed = space_now
 
 # Wii-Sports player swing: forgiving — if the ball is anywhere within
 # PLAYER_HIT_RANGE of the character, the swing connects and the ball flies
@@ -1201,7 +1194,8 @@ func _reset_rally() -> void:
 	total_bounces_in_rally = 0
 	ai_ready_to_swing = false
 	ai_swing_timer = 0.0
-	was_space_pressed = false
+	was_serve_space_pressed = false
+	was_rally_space_pressed = false
 	match_manager.reset_rally()
 	ai_manager.reset()
 	ball.reset()
