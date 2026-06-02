@@ -84,6 +84,11 @@ var camera_base_pos: Vector3 = Vector3.ZERO
 
 # Landing marker — a flat ring on the court showing where the ball will bounce.
 var landing_marker: MeshInstance3D = null
+# Swing-zone ring around the player character: colour-coded by how perfect
+# a swing would be right now.
+var swing_zone_ring: MeshInstance3D = null
+const PERFECT_DIST: float = 0.45
+const GOOD_DIST: float = 0.85
 
 # Rally end-condition tracking
 var bounces_since_last_hit: int = 0
@@ -136,6 +141,7 @@ func _ready():
 
 	# Spawn the landing marker (hidden until first serve).
 	_spawn_landing_marker()
+	_spawn_swing_zone_ring()
 
 	# Spawn the on-screen touch controls overlay.
 	_spawn_touch_controls()
@@ -293,27 +299,48 @@ func _process_rally_input() -> void:
 
 # Wii-Sports player swing: forgiving — if the ball is anywhere within
 # PLAYER_HIT_RANGE of the character, the swing connects and the ball flies
-# back toward the opponent's court. Direction is biased by where the ball
-# was relative to the character at contact.
+# back toward the opponent's court. Timing quality (distance at impact)
+# controls power: closer = PERFECT, further = OK.
 func _player_swing() -> void:
-	# Don't allow re-hitting a ball we just sent away.
-	if ball.linear_velocity.z > 0.5:
+	_player_swing_with_shot(BallRef.ShotType.DRIVE)
+
+# Single entry point — used by keyboard Space and by the LOB/DRIVE/DINK
+# touch buttons. Computes the timing quality, shows feedback, applies a
+# power proportional to that quality.
+func _player_swing_with_shot(shot_type: int) -> void:
+	if not (rally_active and ball.is_in_play and ball.position.z < 0):
 		return
+	if ball.linear_velocity.z > 0.5:
+		return  # ball flying away, can't be hit
 	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
 	if dist > PLAYER_HIT_RANGE:
-		hud.show_message("Whiff!")
+		hud.show_message("Whiff!", Color(1, 0.4, 0.4))
 		return
-	# Direction-from-position: hit ball.x flips to opposite side for a
-	# crisper cross-court feel. Z target is mid-opponent's court.
-	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.15, 0.15), -0.8, 0.8)
-	var target_z: float = OPPONENT_BASELINE - randf_range(0.2, 0.6)
+	var power: float
+	if dist < PERFECT_DIST:
+		hud.show_message("✦ PERFECT! ✦", Color(0.2, 1.0, 0.4))
+		power = 1.0
+	elif dist < GOOD_DIST:
+		hud.show_message("GOOD!", Color(1.0, 0.95, 0.2))
+		power = 0.85
+	else:
+		hud.show_message("OK", Color(1.0, 0.6, 0.2))
+		power = 0.65
+	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.12, 0.12), -0.8, 0.8)
+	var target_z: float
+	match shot_type:
+		BallRef.ShotType.LOB:
+			target_z = OPPONENT_BASELINE - randf_range(0.05, 0.2)   # deep lob
+		BallRef.ShotType.DINK:
+			target_z = randf_range(0.2, 0.55)                       # near kitchen
+		_:
+			target_z = OPPONENT_BASELINE - randf_range(0.3, 0.55)   # drive mid
 	var target := Vector3(target_x, 0, target_z)
-	# Reuse ball.serve()'s projectile math for an honest landing target.
-	ball.serve(ball.position, target, 0.75)
+	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
-	last_player_shot_type = BallRef.ShotType.DRIVE
-	EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, 0.75)
-	_announce_shot(BallRef.ShotType.DRIVE)
+	last_player_shot_type = shot_type
+	EventBus.ball_hit.emit(0, shot_type, power)
+	_announce_shot(shot_type)
 	match_manager.record_hit()
 	_animate_paddle_swing(player)
 
@@ -469,34 +496,55 @@ func _on_touch_dink() -> void:
 	_touch_hit(BallRef.ShotType.DINK)
 
 func _touch_hit(shot_type: int) -> void:
-	if not (rally_active and ball.is_in_play and ball.position.z < 0):
-		return
-	if ball.linear_velocity.z > 0.5:
-		return  # ball flying away — can't be hit
-	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
-	if dist > PLAYER_HIT_RANGE:
-		hud.show_message("Whiff!")
-		return
-	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.15, 0.15), -0.8, 0.8)
-	var target_z: float
-	match shot_type:
-		BallRef.ShotType.LOB:
-			target_z = OPPONENT_BASELINE - randf_range(0.1, 0.25)  # deep
-		BallRef.ShotType.DINK:
-			target_z = randf_range(0.2, 0.55)  # short, near kitchen
-		_:
-			target_z = OPPONENT_BASELINE - randf_range(0.35, 0.6)  # mid
-	var target := Vector3(target_x, 0, target_z)
-	ball.serve(ball.position, target, 0.75)
-	ball.last_hitter_id = 0
-	last_player_shot_type = shot_type
-	EventBus.ball_hit.emit(0, shot_type, 0.75)
-	_announce_shot(shot_type)
-	match_manager.record_hit()
-	_animate_paddle_swing(player)
+	# Touch buttons share the keyboard swing's quality-based pipeline.
+	_player_swing_with_shot(shot_type)
 
 func _on_touch_move(direction: Vector2) -> void:
 	touch_move_dir = direction
+
+func _spawn_swing_zone_ring() -> void:
+	swing_zone_ring = MeshInstance3D.new()
+	var torus: TorusMesh = TorusMesh.new()
+	torus.inner_radius = 0.22
+	torus.outer_radius = 0.28
+	torus.rings = 24
+	torus.ring_segments = 8
+	swing_zone_ring.mesh = torus
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.2, 1.0, 0.2, 0.9)
+	mat.emission_enabled = true
+	mat.emission = Color(0.2, 1.0, 0.2)
+	mat.emission_energy_multiplier = 0.8
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	swing_zone_ring.material_override = mat
+	swing_zone_ring.visible = false
+	add_child(swing_zone_ring)
+
+func _update_swing_zone_ring() -> void:
+	if swing_zone_ring == null:
+		return
+	# Only show when the ball is approaching the player on their side.
+	if not (rally_active and ball.is_in_play) \
+		or ball.position.z >= 0 \
+		or ball.linear_velocity.z > 0.5:
+		swing_zone_ring.visible = false
+		return
+	swing_zone_ring.visible = true
+	swing_zone_ring.global_position = Vector3(player.position.x, 0.015, player.position.z)
+	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
+	var color: Color
+	if dist < PERFECT_DIST:
+		color = Color(0.15, 1.0, 0.35, 1.0)        # green
+	elif dist < GOOD_DIST:
+		color = Color(1.0, 0.95, 0.2, 0.95)        # yellow
+	elif dist < PLAYER_HIT_RANGE:
+		color = Color(1.0, 0.55, 0.15, 0.9)        # orange
+	else:
+		color = Color(1.0, 0.25, 0.25, 0.7)        # red
+	var mat: StandardMaterial3D = swing_zone_ring.material_override as StandardMaterial3D
+	mat.albedo_color = color
+	mat.emission = Color(color.r, color.g, color.b)
 
 func _spawn_landing_marker() -> void:
 	landing_marker = MeshInstance3D.new()
@@ -596,6 +644,7 @@ func _process(delta: float) -> void:
 	_check_ball_out_of_bounds()
 	_update_turn_indicator()
 	_update_landing_marker()
+	_update_swing_zone_ring()
 	_process_serve_input(delta)
 	_process_rally_input()
 	_process_ai_swing(delta)
