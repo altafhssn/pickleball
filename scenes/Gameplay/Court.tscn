@@ -1,10 +1,10 @@
 [gd_scene load_steps=21 format=3]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_fmb0u"]
-size = Vector3(2.0, 0.05, 3.0)
+size = Vector3(3.0, 0.05, 4.5)
 
 [sub_resource type="BoxMesh" id="BoxMesh_3cx0g"]
-size = Vector3(2.0, 0.05, 3.0)
+size = Vector3(3.0, 0.05, 4.5)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_c3kl0"]
 albedo_color = Color(0.1, 0.45, 0.35, 1)
@@ -16,29 +16,29 @@ emission = Color(1, 1, 1, 1)
 emission_energy_multiplier = 0.05
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_qw3e5"]
-size = Vector3(2.08, 0.10, 0.02)
+size = Vector3(3.12, 0.10, 0.02)
 
 [sub_resource type="BoxMesh" id="BoxMesh_g1af5"]
-size = Vector3(2.08, 0.10, 0.02)
+size = Vector3(3.12, 0.10, 0.02)
 
 [sub_resource type="BoxMesh" id="BoxMesh_6fa23"]
-size = Vector3(2.08, 0.02, 0.025)
+size = Vector3(3.12, 0.02, 0.025)
 
 [sub_resource type="BoxMesh" id="BoxMesh_f3sd1"]
-size = Vector3(0.02, 0.005, 3.0)
+size = Vector3(0.02, 0.005, 4.5)
 
 [sub_resource type="BoxMesh" id="BoxMesh_d4gh2"]
-size = Vector3(2.0, 0.005, 0.02)
+size = Vector3(3.0, 0.005, 0.02)
 
 [sub_resource type="BoxMesh" id="BoxMesh_h5jk3"]
-size = Vector3(0.02, 0.005, 1.02)
+size = Vector3(0.02, 0.005, 1.53)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_netmat"]
 albedo_color = Color(0.95, 0.95, 0.95, 0.8)
 transparency = 1
 
 [sub_resource type="BoxMesh" id="BoxMesh_kitchen"]
-size = Vector3(2.0, 0.002, 0.96)
+size = Vector3(3.0, 0.002, 1.44)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_kitchen"]
 albedo_color = Color(0.85, 0.62, 0.32, 0.55)
@@ -78,42 +78,42 @@ position = Vector3(0, 0.0015, 0)
 [node name="SidelineLeft" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_f3sd1")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(-1.0, 0.001, 0)
+position = Vector3(-1.5, 0.001, 0)
 
 [node name="SidelineRight" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_f3sd1")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(1.0, 0.001, 0)
+position = Vector3(1.5, 0.001, 0)
 
 [node name="BaselineFront" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_d4gh2")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(0, 0.001, -1.5)
+position = Vector3(0, 0.001, -2.25)
 
 [node name="BaselineBack" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_d4gh2")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(0, 0.001, 1.5)
+position = Vector3(0, 0.001, 2.25)
 
 [node name="KitchenLineFront" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_d4gh2")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(0, 0.001, -0.48)
+position = Vector3(0, 0.001, -0.72)
 
 [node name="KitchenLineBack" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_d4gh2")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(0, 0.001, 0.48)
+position = Vector3(0, 0.001, 0.72)
 
 [node name="CenterLineFront" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_h5jk3")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(0, 0.001, -0.99)
+position = Vector3(0, 0.001, -1.485)
 
 [node name="CenterLineBack" type="MeshInstance3D" parent="LineMarkings"]
 mesh = SubResource("BoxMesh_h5jk3")
 surface_material_override/0 = SubResource("StandardMaterial3D_n2q2d")
-position = Vector3(0, 0.001, 0.99)
+position = Vector3(0, 0.001, 1.485)
 
 [node name="Net" type="StaticBody3D" parent="."]
 groups = ["net"]

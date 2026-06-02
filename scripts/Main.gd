@@ -47,11 +47,11 @@ var paddle_swing_timer: float = 0.0
 const PADDLE_SWING_DURATION: float = 0.2
 
 # Doubles positions
-const PLAYER_LEFT: float = -0.5
-const PLAYER_RIGHT: float = 0.5
-# Real baselines — players stand just inside the back baseline (z = ±1.5).
-const PLAYER_BASELINE: float = -1.3
-const OPPONENT_BASELINE: float = 1.3
+const PLAYER_LEFT: float = -0.75
+const PLAYER_RIGHT: float = 0.75
+# Real baselines — players stand just inside the back baseline (z = ±2.25).
+const PLAYER_BASELINE: float = -1.95
+const OPPONENT_BASELINE: float = 1.95
 
 # On-screen touch controls — all built programmatically in _ready so they
 # can't be foiled by .tscn loading issues.
@@ -74,10 +74,10 @@ var was_rally_space_pressed: bool = false
 var ai_ready_to_swing: bool = false
 var ai_swing_timer: float = 0.0
 const AI_REACTION_TIME: float = 0.35
-const AI_HIT_RANGE: float = 1.3
+const AI_HIT_RANGE: float = 1.95
 # How close the ball needs to be to the player character for a Space press
 # to count as a connected swing. Generous on purpose.
-const PLAYER_HIT_RANGE: float = 1.4
+const PLAYER_HIT_RANGE: float = 2.1
 
 # Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
 var camera_base_pos: Vector3 = Vector3.ZERO
@@ -87,8 +87,8 @@ var landing_marker: MeshInstance3D = null
 # Swing-zone ring around the player character: colour-coded by how perfect
 # a swing would be right now.
 var swing_zone_ring: MeshInstance3D = null
-const PERFECT_DIST: float = 0.45
-const GOOD_DIST: float = 0.85
+const PERFECT_DIST: float = 0.7
+const GOOD_DIST: float = 1.3
 
 # Rally end-condition tracking
 var bounces_since_last_hit: int = 0
@@ -99,10 +99,10 @@ var total_bounces_in_rally: int = 0
 # proper physics, but a real bug-prevention belt-and-suspenders).
 var ball_rest_timer: float = 0.0
 const BALL_REST_TIMEOUT: float = 0.8
-# Court extends x ∈ [-1.0, 1.0] (sidelines), z ∈ [-1.5, 1.5] (baselines).
+# Court extends x ∈ [-1.5, 1.5] (sidelines), z ∈ [-2.25, 2.25] (baselines).
 # Allow a small "in" margin so close shots don't get incorrectly called out.
-const OUT_X_LIMIT: float = 1.05
-const OUT_Z_LIMIT: float = 1.55
+const OUT_X_LIMIT: float = 1.55
+const OUT_Z_LIMIT: float = 2.30
 const FLOOR_Y_LIMIT: float = -0.3
 
 func _ready():
@@ -128,7 +128,7 @@ func _ready():
 	# Place the camera behind the player (player is at -z) so the human
 	# sees their own (blue) character in the foreground. Closer position
 	# and narrower FOV make the court fill more of the screen.
-	camera.position = Vector3(0, 2.0, -3.0)
+	camera.position = Vector3(0, 2.8, -4.2)
 	camera.look_at(Vector3(0, 0.3, 0), Vector3.UP)
 	camera.fov = 65
 
@@ -332,15 +332,15 @@ func _player_swing_with_shot(shot_type: int) -> void:
 	else:
 		hud.show_message("OK", Color(1.0, 0.6, 0.2))
 		power = 0.65
-	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.12, 0.12), -0.8, 0.8)
+	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.18, 0.18), -1.2, 1.2)
 	var target_z: float
 	match shot_type:
 		BallRef.ShotType.LOB:
-			target_z = OPPONENT_BASELINE - randf_range(0.05, 0.2)   # deep lob
+			target_z = OPPONENT_BASELINE - randf_range(0.1, 0.3)   # deep lob
 		BallRef.ShotType.DINK:
-			target_z = randf_range(0.2, 0.55)                       # near kitchen
+			target_z = randf_range(0.3, 0.8)                       # near kitchen
 		_:
-			target_z = OPPONENT_BASELINE - randf_range(0.3, 0.55)   # drive mid
+			target_z = OPPONENT_BASELINE - randf_range(0.45, 0.85) # drive mid
 	var target := Vector3(target_x, 0, target_z)
 	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
@@ -381,8 +381,8 @@ func _process_ai_swing(delta: float) -> void:
 func _ai_swing() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
-	var target_x: float = clampf(-ball.position.x * 0.5 + randf_range(-0.3, 0.3), -0.8, 0.8)
-	var target_z: float = PLAYER_BASELINE + randf_range(0.2, 0.6)
+	var target_x: float = clampf(-ball.position.x * 0.5 + randf_range(-0.45, 0.45), -1.2, 1.2)
+	var target_z: float = PLAYER_BASELINE + randf_range(0.3, 0.9)
 	var target := Vector3(target_x, 0, target_z)
 	ball.serve(ball.position, target, 0.75)
 	ball.last_hitter_id = 1
@@ -398,7 +398,7 @@ func _launch_player_serve(power: float) -> void:
 
 	# Wii-Sports serve: fixed target in the middle of the opponent's
 	# mid-court with a small random nudge.
-	var target := Vector3(randf_range(-0.3, 0.3), 0, 0.7)
+	var target := Vector3(randf_range(-0.5, 0.5), 0, 1.1)
 	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
 
@@ -689,17 +689,17 @@ func _update_player_auto_move(delta: float) -> void:
 				# Ball is coming to the player — auto-run there.
 				var plx: float = landing.x if landing.z < -0.05 else ball.position.x
 				var plz: float = landing.z if landing.z < -0.05 else ball.position.z
-				player_target_x = clampf(plx, -0.9, 0.9)
-				player_target_z = clampf(plz + 0.1, -1.4, -0.55)
-				opp_target_x = clampf(ball.position.x * 0.3, -0.4, 0.4)
+				player_target_x = clampf(plx, -1.4, 1.4)
+				player_target_z = clampf(plz + 0.15, -2.1, -0.85)
+				opp_target_x = clampf(ball.position.x * 0.3, -0.6, 0.6)
 				opp_target_z = OPPONENT_BASELINE
 			else:
 				# Ball heading to the AI — AI runs there, player drifts back.
 				var olx: float = landing.x if landing.z > 0.05 else ball.position.x
 				var olz: float = landing.z if landing.z > 0.05 else ball.position.z
-				opp_target_x = clampf(olx, -0.9, 0.9)
-				opp_target_z = clampf(olz - 0.1, 0.55, 1.4)
-				player_target_x = clampf(ball.position.x * 0.3, -0.4, 0.4)
+				opp_target_x = clampf(olx, -1.4, 1.4)
+				opp_target_z = clampf(olz - 0.15, 0.85, 2.1)
+				player_target_x = clampf(ball.position.x * 0.3, -0.6, 0.6)
 				player_target_z = PLAYER_BASELINE
 
 	# Move rate per second. Wii-Sports auto-positioning wants characters to
@@ -734,8 +734,8 @@ func _update_camera() -> void:
 	# the human's own (blue) character is in the foreground. dest_z stays
 	# negative; we still nudge it slightly with the ball so the framing
 	# pulls back when the ball is deep on the opponent's side.
-	var follow: float = ball.position.z * 0.10
-	var dest_z: float = (-3.3 if is_doubles else -3.0) - follow
+	var follow: float = ball.position.z * 0.08
+	var dest_z: float = (-4.6 if is_doubles else -4.2) - follow
 	camera_base_pos.z = move_toward(camera_base_pos.z, dest_z, 0.05)
 	camera.position = camera_base_pos + game_feel.current_shake_offset
 	# Re-aim each frame so the basis stays consistent as we follow the ball.
@@ -885,7 +885,7 @@ func _reset_for_doubles_ai_serve(server_pos: int) -> void:
 
 func _ai_serve() -> void:
 	# Center-ish target on the player's side, past their kitchen line.
-	var target = Vector3(randf_range(-0.3, 0.3), 0, PLAYER_BASELINE + 0.3)
+	var target = Vector3(randf_range(-0.5, 0.5), 0, PLAYER_BASELINE + 0.45)
 	ball.serve(ball.position, target, 0.7)
 	ball.last_hitter_id = 1
 	EventBus.ball_served.emit(ball.position, target)
