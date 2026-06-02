@@ -355,7 +355,10 @@ func _player_swing_with_shot(shot_type: int) -> void:
 	ball.launch_at_target(ball.position, target, flight_time)
 	ball.last_hitter_id = 0
 	last_player_shot_type = shot_type
-	EventBus.ball_hit.emit(0, shot_type, power)
+	# Convert the timing tier back to a 0-1 "power" for downstream listeners
+	# (audio, vfx) that still expect that signal shape.
+	var emit_power: float = 1.0 - clampf(quality_scale / 0.45, 0.0, 1.0) * 0.5
+	EventBus.ball_hit.emit(0, shot_type, emit_power)
 	_announce_shot(shot_type)
 	match_manager.record_hit()
 	_animate_paddle_swing(player)
