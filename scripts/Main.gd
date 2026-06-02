@@ -380,65 +380,49 @@ func _launch_player_serve(power: float) -> void:
 	_set_touch_shot_buttons_visible(true)
 
 func _spawn_touch_controls() -> void:
-	# Build the touch controls overlay programmatically — no scene file,
-	# no @onready, no preset confusion. Anchors set explicitly so the
-	# buttons land in the corners regardless of window aspect.
+	# Built programmatically with PERCENTAGE-BASED anchors so the buttons
+	# land in the corners regardless of viewport aspect ratio.
 	touch_layer = CanvasLayer.new()
 	touch_layer.name = "TouchControls"
 	touch_layer.layer = 10
 	add_child(touch_layer)
 
-	touch_btn_serve = _make_touch_button("SERVE", Vector2(-320, -260), Vector2(-50, -110), 56, Color(1.0, 0.55, 0.1, 0.95))
+	# SERVE: big button center-right, ~25% wide, ~12% tall.
+	touch_btn_serve = _make_percent_button("SERVE", 0.70, 0.72, 0.95, 0.88, 56, Color(1.0, 0.55, 0.1, 0.95))
 	touch_btn_serve.pressed.connect(_on_touch_serve)
 	touch_btn_serve.visible = false
 
-	touch_btn_lob = _make_touch_button("LOB", Vector2(-280, -360), Vector2(-70, -270), 42, Color(0.1, 0.1, 0.15, 0.9))
+	# Shot buttons: stacked vertically on the right edge.
+	touch_btn_lob = _make_percent_button("LOB", 0.80, 0.58, 0.97, 0.70, 40, Color(0.1, 0.1, 0.15, 0.9))
 	touch_btn_lob.pressed.connect(_on_touch_lob)
-	touch_btn_drive = _make_touch_button("DRIVE", Vector2(-280, -250), Vector2(-70, -160), 42, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_drive = _make_percent_button("DRIVE", 0.80, 0.72, 0.97, 0.84, 40, Color(0.1, 0.1, 0.15, 0.9))
 	touch_btn_drive.pressed.connect(_on_touch_drive)
-	touch_btn_dink = _make_touch_button("DINK", Vector2(-280, -140), Vector2(-70, -50), 42, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_dink = _make_percent_button("DINK", 0.80, 0.86, 0.97, 0.98, 40, Color(0.1, 0.1, 0.15, 0.9))
 	touch_btn_dink.pressed.connect(_on_touch_dink)
 	_set_touch_shot_buttons_visible(false)
 
-	# D-pad on the left side — visible always.
-	touch_btn_up = _make_touch_button_left("▲", Vector2(155, -340), Vector2(235, -260), 44)
-	touch_btn_down = _make_touch_button_left("▼", Vector2(155, -170), Vector2(235, -90), 44)
-	touch_btn_left = _make_touch_button_left("◀", Vector2(70, -255), Vector2(150, -175), 44)
-	touch_btn_right = _make_touch_button_left("▶", Vector2(240, -255), Vector2(320, -175), 44)
+	# D-pad on the bottom-left in a + cross layout.
+	touch_btn_up    = _make_percent_button("▲", 0.08, 0.58, 0.16, 0.68, 44, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_left  = _make_percent_button("◀", 0.02, 0.70, 0.10, 0.80, 44, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_right = _make_percent_button("▶", 0.14, 0.70, 0.22, 0.80, 44, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_down  = _make_percent_button("▼", 0.08, 0.82, 0.16, 0.92, 44, Color(0.1, 0.1, 0.15, 0.9))
 
-func _make_touch_button(text: String, top_left: Vector2, bottom_right: Vector2, font_size: int, bg: Color) -> Button:
-	# Right-anchored — offsets are negative (measured from the right/bottom edges).
+# Place a button using percentage-of-viewport anchors.
+# x/y ranges should be in [0, 1]. Resulting rect fits regardless of aspect.
+func _make_percent_button(text: String, ax: float, ay: float, bx: float, by: float, font_size: int, bg: Color) -> Button:
 	var b: Button = Button.new()
 	b.text = text
-	b.anchor_left = 1.0
-	b.anchor_top = 1.0
-	b.anchor_right = 1.0
-	b.anchor_bottom = 1.0
-	b.offset_left = top_left.x
-	b.offset_top = top_left.y
-	b.offset_right = bottom_right.x
-	b.offset_bottom = bottom_right.y
+	b.anchor_left = ax
+	b.anchor_top = ay
+	b.anchor_right = bx
+	b.anchor_bottom = by
+	b.offset_left = 0
+	b.offset_top = 0
+	b.offset_right = 0
+	b.offset_bottom = 0
 	b.add_theme_font_size_override("font_size", font_size)
 	b.add_theme_color_override("font_color", Color(1, 1, 1, 1))
 	_apply_touch_button_style(b, bg)
-	touch_layer.add_child(b)
-	return b
-
-func _make_touch_button_left(text: String, top_left: Vector2, bottom_right: Vector2, font_size: int) -> Button:
-	# Left-anchored — offsets are positive from the left edge, negative from bottom.
-	var b: Button = Button.new()
-	b.text = text
-	b.anchor_left = 0.0
-	b.anchor_top = 1.0
-	b.anchor_right = 0.0
-	b.anchor_bottom = 1.0
-	b.offset_left = top_left.x
-	b.offset_top = top_left.y
-	b.offset_right = bottom_right.x
-	b.offset_bottom = bottom_right.y
-	b.add_theme_font_size_override("font_size", font_size)
-	b.add_theme_color_override("font_color", Color(1, 1, 1, 1))
-	_apply_touch_button_style(b, Color(0.1, 0.1, 0.15, 0.9))
 	touch_layer.add_child(b)
 	return b
 
