@@ -1220,6 +1220,12 @@ func _check_ball_stuck(delta: float) -> void:
 func _check_ball_out_of_bounds() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
+	# Real pickleball rule: the FIRST bounce after a hit determines in/out.
+	# Once the ball has bounced legally, it can roll/bounce out the back —
+	# the rally still ends via double-bounce or stuck-ball, not OOB. Only
+	# check OOB while the ball is still in its initial flight.
+	if bounces_since_last_hit >= 1:
+		return
 	var pos: Vector3 = ball.position
 	if absf(pos.x) > OUT_X_LIMIT or absf(pos.z) > OUT_Z_LIMIT or pos.y < FLOOR_Y_LIMIT:
 		_end_rally_out_of_bounds()
