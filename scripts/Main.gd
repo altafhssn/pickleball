@@ -76,7 +76,7 @@ var ai_swing_timer: float = 0.0
 # Flag set when AI just swung; cleared when the ball crosses back to the
 # player's side. Prevents the AI from re-hitting its own outgoing ball.
 var ai_just_swung: bool = false
-const AI_REACTION_TIME: float = 0.20
+const AI_REACTION_TIME: float = 0.35
 const AI_HIT_RANGE: float = 2.50
 # How close the ball needs to be to the player character for a Space press
 # to count as a connected swing. Generous on purpose.
@@ -714,10 +714,9 @@ func _update_player_auto_move(delta: float) -> void:
 				player_target_x = clampf(ball.position.x * 0.3, -0.6, 0.6)
 				player_target_z = PLAYER_BASELINE
 
-	# Move rate per second. Slowed enough that characters look like they
-	# RUN to the ball instead of teleporting. Realistic-ish: a quick
-	# pickleball player covers about half a court in a second.
-	var move_rate: float = delta * 3.5
+	# Move rate per second. Sport-pacing — characters jog to the ball
+	# without snapping. About a quarter court per second.
+	var move_rate: float = delta * 2.5
 	player.position.x = move_toward(player.position.x, player_target_x, move_rate)
 	player.position.z = move_toward(player.position.z, player_target_z, move_rate)
 
