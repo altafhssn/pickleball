@@ -77,7 +77,9 @@ var ai_swing_timer: float = 0.0
 # player's side. Prevents the AI from re-hitting its own outgoing ball.
 var ai_just_swung: bool = false
 const AI_REACTION_TIME: float = 0.35
-const AI_HIT_RANGE: float = 2.50
+# Tighter than the player's range — the AI has to actually be near the ball
+# to connect, so well-placed shots into the corners win the rally outright.
+const AI_HIT_RANGE: float = 1.20
 # How close the ball needs to be to the player character for a Space press
 # to count as a connected swing. Generous on purpose.
 const PLAYER_HIT_RANGE: float = 2.1
