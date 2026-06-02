@@ -16,7 +16,6 @@ config/version="0.1.0"
 config/tags=PackedStringArray("pickleball", "sports", "multiplayer", "mobile", "3d")
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6")
-boot_splash/fullsize=true
 
 [autoload]
 
@@ -27,12 +26,12 @@ ScreenTransition="*res://scenes/UI/ScreenTransition.tscn"
 
 [display]
 
-window/size/viewport_width=1080
-window/size/viewport_height=1920
+window/size/viewport_width=1920
+window/size/viewport_height=1080
 window/size/mode=2
 window/stretch/mode="canvas_items"
-window/stretch/aspect="expand"
-window/handheld/orientation=1
+window/stretch/aspect="keep"
+window/handheld/orientation=0
 
 [dotnet]
 
