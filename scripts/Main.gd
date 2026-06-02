@@ -53,6 +53,9 @@ const PLAYER_RIGHT: float = 0.5
 const PLAYER_BASELINE: float = -1.3
 const OPPONENT_BASELINE: float = 1.3
 
+# On-screen touch controls instance (instantiated in _ready).
+var touch_controls: CanvasLayer = null
+var touch_move_dir: Vector2 = Vector2.ZERO
 # Wii-Sports-style one-button gameplay state. Two trackers because serve
 # and rally share the Space key and we want both to edge-detect cleanly.
 var was_serve_space_pressed: bool = false
@@ -124,6 +127,9 @@ func _ready():
 
 	# Spawn the landing marker (hidden until first serve).
 	_spawn_landing_marker()
+
+	# Spawn the on-screen touch controls overlay.
+	_spawn_touch_controls()
 	
 	# Connect hit VFX
 	EventBus.ball_hit.connect(_spawn_hit_vfx)
@@ -361,6 +367,62 @@ func _launch_player_serve(power: float) -> void:
 	game_state.transition_to(GameStateRef.State.PLAY)
 	hud.show_serve_indicator("")
 	hud.show_gesture_guide(true)
+	if touch_controls:
+		touch_controls.show_serve_button(false)
+		touch_controls.show_shot_buttons(true)
+
+func _spawn_touch_controls() -> void:
+	var scene: PackedScene = load("res://scenes/UI/TouchControls.tscn")
+	touch_controls = scene.instantiate()
+	add_child(touch_controls)
+	touch_controls.serve_pressed.connect(_on_touch_serve)
+	touch_controls.lob_pressed.connect(_on_touch_lob)
+	touch_controls.drive_pressed.connect(_on_touch_drive)
+	touch_controls.dink_pressed.connect(_on_touch_dink)
+	touch_controls.move_input.connect(_on_touch_move)
+
+func _on_touch_serve() -> void:
+	if game_state.can_serve() and is_player_serving and player_serve_ready:
+		_launch_player_serve(0.8)
+
+func _on_touch_lob() -> void:
+	_touch_hit(BallRef.ShotType.LOB)
+
+func _on_touch_drive() -> void:
+	_touch_hit(BallRef.ShotType.DRIVE)
+
+func _on_touch_dink() -> void:
+	_touch_hit(BallRef.ShotType.DINK)
+
+func _touch_hit(shot_type: int) -> void:
+	if not (rally_active and ball.is_in_play and ball.position.z < 0):
+		return
+	if ball.linear_velocity.z > 0.5:
+		return  # ball flying away — can't be hit
+	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
+	if dist > PLAYER_HIT_RANGE:
+		hud.show_message("Whiff!")
+		return
+	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.15, 0.15), -0.8, 0.8)
+	var target_z: float
+	match shot_type:
+		BallRef.ShotType.LOB:
+			target_z = OPPONENT_BASELINE - randf_range(0.1, 0.25)  # deep
+		BallRef.ShotType.DINK:
+			target_z = randf_range(0.2, 0.55)  # short, near kitchen
+		_:
+			target_z = OPPONENT_BASELINE - randf_range(0.35, 0.6)  # mid
+	var target := Vector3(target_x, 0, target_z)
+	ball.serve(ball.position, target, 0.75)
+	ball.last_hitter_id = 0
+	last_player_shot_type = shot_type
+	EventBus.ball_hit.emit(0, shot_type, 0.75)
+	_announce_shot(shot_type)
+	match_manager.record_hit()
+	_animate_paddle_swing(player)
+
+func _on_touch_move(direction: Vector2) -> void:
+	touch_move_dir = direction
 
 func _spawn_landing_marker() -> void:
 	landing_marker = MeshInstance3D.new()
@@ -650,11 +712,17 @@ func _on_serve_ready(server_id: int, _side: int) -> void:
 	
 	if is_player_serving:
 		player_serve_ready = true
-		hud.show_serve_indicator("Press Space to serve")
+		hud.show_serve_indicator("Tap SERVE to serve")
 		player.position = Vector3(0, 0, PLAYER_BASELINE)
 		ball.hold_for_serve(Vector3(0, 0.5, PLAYER_BASELINE + 0.05))
+		if touch_controls:
+			touch_controls.show_serve_button(true)
+			touch_controls.show_shot_buttons(false)
 	else:
 		hud.show_serve_indicator("Opponent serving…")
+		if touch_controls:
+			touch_controls.show_serve_button(false)
+			touch_controls.show_shot_buttons(false)
 		_reset_for_ai_serve()
 
 # === SERVE FLOW (Doubles) ===
@@ -1034,7 +1102,10 @@ func _on_ball_hit_net() -> void:
 
 func _on_point_awarded(scorer_id: int, reason: String) -> void:
 	rally_active = false
-	
+	if touch_controls:
+		touch_controls.show_serve_button(false)
+		touch_controls.show_shot_buttons(false)
+
 	# Celebrate if the player or player's partner (in doubles) scored
 	if scorer_id == 0:
 		if player and player.has_method("celebrate"):
