@@ -110,8 +110,9 @@ func _ensure_visible_bounce() -> void:
 		linear_velocity.y = MIN_BOUNCE_VY
 
 func hold_for_serve(at_position: Vector3) -> void:
-	# Park the ball mid-air for the serve setup. Freeze so gravity doesn't
-	# drop it while the server (or the user) is preparing.
+	# Park the ball mid-air for the serve setup. Suspending gravity (rather
+	# than using freeze) keeps the body fully dynamic, so the velocity we
+	# assign in serve() applies immediately on the next physics tick.
 	global_position = at_position
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
@@ -119,10 +120,10 @@ func hold_for_serve(at_position: Vector3) -> void:
 	has_bounced_this_side = false
 	rest_fired = false
 	is_in_play = false
-	freeze = true
+	gravity_scale = 0.0
 
 func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0) -> void:
-	freeze = false
+	gravity_scale = 1.0
 	global_position = from_position
 	is_in_play = true
 	has_bounced_this_side = false
@@ -191,7 +192,7 @@ func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vecto
 	linear_velocity = dir.normalized() * shot_speed
 
 func reset() -> void:
-	freeze = false
+	gravity_scale = 1.0
 	is_in_play = false
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
