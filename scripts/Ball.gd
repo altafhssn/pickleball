@@ -103,8 +103,8 @@ func _on_body_entered(body: Node) -> void:
 		call_deferred("_ensure_visible_bounce")
 
 func _ensure_visible_bounce() -> void:
-	const MIN_BOUNCE_VY: float = 0.9
-	const HORIZ_THRESHOLD: float = 1.0
+	const MIN_BOUNCE_VY: float = 0.4
+	const HORIZ_THRESHOLD: float = 1.5
 	var horiz_speed: float = Vector2(linear_velocity.x, linear_velocity.z).length()
 	if linear_velocity.y >= 0.0 and linear_velocity.y < MIN_BOUNCE_VY and horiz_speed > HORIZ_THRESHOLD:
 		linear_velocity.y = MIN_BOUNCE_VY
@@ -123,6 +123,15 @@ func hold_for_serve(at_position: Vector3) -> void:
 	gravity_scale = 0.0
 
 func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0) -> void:
+	# Serve uses a power-mapped flight time. Higher power = shorter flight
+	# = flatter trajectory; lower power = longer flight = looser arc.
+	var flight_time: float = lerpf(1.10, 0.75, clampf(power, 0.0, 1.0))
+	launch_at_target(from_position, target_position, flight_time)
+
+# Generic projectile launcher — lets the caller pick flight_time directly so
+# different shot types can have explicit trajectories (LOB high & slow, DRIVE
+# flat & fast, DINK short & soft).
+func launch_at_target(from_position: Vector3, target_position: Vector3, flight_time: float) -> void:
 	gravity_scale = 1.0
 	global_position = from_position
 	is_in_play = true
@@ -130,22 +139,13 @@ func serve(from_position: Vector3, target_position: Vector3, power: float = 1.0)
 	rest_fired = false
 	shot_type = ShotType.DRIVE
 
-	# Solve projectile motion to land *exactly* at target_position.y = 0
-	# starting from from_position with a chosen flight time. Higher power
-	# = shorter flight time = flatter, faster shot. Long flight times so
-	# the rally has a readable beat-beat-beat rhythm.
-	var flight_time: float = lerpf(1.80, 1.20, clampf(power, 0.0, 1.0))
 	var g: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
-
 	# y(t) = from.y + vy*t - 0.5*g*t² = target.y
 	var vy: float = (target_position.y - from_position.y + 0.5 * g * flight_time * flight_time) / flight_time
-
-	# Horizontal — straight to target.
 	var dx: float = target_position.x - from_position.x
 	var dz: float = target_position.z - from_position.z
 	var vx: float = dx / flight_time
 	var vz: float = dz / flight_time
-
 	linear_velocity = Vector3(vx, vy, vz)
 
 func hit(force: float, direction: Vector3, shot: ShotType, spin: Vector3 = Vector3.ZERO) -> void:

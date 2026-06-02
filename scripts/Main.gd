@@ -325,27 +325,34 @@ func _player_swing_with_shot(shot_type: int) -> void:
 	if dist > PLAYER_HIT_RANGE:
 		hud.show_message("Whiff!", Color(1, 0.4, 0.4))
 		return
-	var power: float
+	# Tier feedback only — quality affects target precision, not arc.
+	var quality_scale: float
 	if dist < PERFECT_DIST:
 		hud.show_message("✦ PERFECT! ✦", Color(0.2, 1.0, 0.4))
-		power = 0.85
+		quality_scale = 0.10  # tight aim
 	elif dist < GOOD_DIST:
 		hud.show_message("GOOD!", Color(1.0, 0.95, 0.2))
-		power = 0.7
+		quality_scale = 0.25
 	else:
 		hud.show_message("OK", Color(1.0, 0.6, 0.2))
-		power = 0.5
-	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.18, 0.18), -1.2, 1.2)
+		quality_scale = 0.45  # sprayed aim
+	# Shot type determines trajectory (flight time) and target depth.
+	# LOB high & deep; DINK low & short; DRIVE low & mid.
+	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-quality_scale, quality_scale), -1.2, 1.2)
 	var target_z: float
+	var flight_time: float
 	match shot_type:
 		BallRef.ShotType.LOB:
-			target_z = OPPONENT_BASELINE - randf_range(0.1, 0.3)   # deep lob
+			target_z = OPPONENT_BASELINE - randf_range(0.15, 0.4)
+			flight_time = 1.10
 		BallRef.ShotType.DINK:
-			target_z = randf_range(0.3, 0.8)                       # near kitchen
+			target_z = randf_range(0.35, 0.85)
+			flight_time = 0.90
 		_:
-			target_z = OPPONENT_BASELINE - randf_range(0.45, 0.85) # drive mid
+			target_z = OPPONENT_BASELINE - randf_range(0.5, 0.95)
+			flight_time = 0.70
 	var target := Vector3(target_x, 0, target_z)
-	ball.serve(ball.position, target, power)
+	ball.launch_at_target(ball.position, target, flight_time)
 	ball.last_hitter_id = 0
 	last_player_shot_type = shot_type
 	EventBus.ball_hit.emit(0, shot_type, power)
@@ -388,9 +395,10 @@ func _ai_swing() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
 	var target_x: float = clampf(-ball.position.x * 0.5 + randf_range(-0.45, 0.45), -1.2, 1.2)
-	var target_z: float = PLAYER_BASELINE + randf_range(0.3, 0.9)
+	var target_z: float = PLAYER_BASELINE + randf_range(0.4, 1.0)
 	var target := Vector3(target_x, 0, target_z)
-	ball.serve(ball.position, target, 0.6)
+	# AI uses a flat DRIVE-style trajectory most of the time.
+	ball.launch_at_target(ball.position, target, 0.85)
 	ball.last_hitter_id = 1
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.75)
 	match_manager.record_hit()

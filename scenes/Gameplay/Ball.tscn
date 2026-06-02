@@ -17,8 +17,8 @@ emission = Color(0.95, 0.8, 0.3, 1)
 emission_energy_multiplier = 0.3
 
 [sub_resource type="PhysicsMaterial" id="PhysicsMaterial_d4xkn"]
-bounce = 0.55
-friction = 0.55
+bounce = 0.35
+friction = 0.7
 
 [node name="Ball" type="RigidBody3D"]
 mass = 0.5
