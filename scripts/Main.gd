@@ -557,7 +557,7 @@ func _spawn_power_meter() -> void:
 		add_child(seg)
 		power_segments.append(seg)
 
-func _update_power_meter() -> void:
+func _update_power_meter_segments() -> void:
 	if power_segments.is_empty():
 		return
 	# Only visible while the ball is approaching the player on their side.
@@ -756,7 +756,7 @@ func _process(delta: float) -> void:
 	_update_turn_indicator()
 	_update_landing_marker()
 	_update_swing_zone_ring()
-	_update_power_meter()
+	_update_power_meter_segments()
 	_process_serve_input(delta)
 	_process_rally_input()
 	_process_ai_swing(delta)
