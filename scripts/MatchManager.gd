@@ -5,8 +5,8 @@ extends Node
 # Match types
 enum MatchType { QUICK, RANKED, DOUBLES, PRACTICE }
 
-# Scoring constants
-const POINTS_TO_WIN: int = 11
+# Scoring constants — Wii-Sports-style short match.
+const POINTS_TO_WIN: int = 7
 const WIN_BY: int = 2
 
 # Current match state

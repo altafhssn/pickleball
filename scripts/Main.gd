@@ -53,25 +53,17 @@ const PLAYER_RIGHT: float = 0.5
 const PLAYER_BASELINE: float = -1.3
 const OPPONENT_BASELINE: float = 1.3
 
-# Serve aim state — player can move the target around using arrow keys
-# before launching, and hold Space to charge power.
-var serve_aim_x: float = 0.0
-var serve_aim_z: float = 0.7   # default deep on opponent's side, past kitchen
-var serve_charging: bool = false
-var serve_charge: float = 0.0
+# Wii-Sports-style one-button gameplay state.
 var was_space_pressed: bool = false
-# Edge-detect rally shot keys so a held key doesn't spam ball.hit().
-var was_w_pressed: bool = false
-var was_a_pressed: bool = false
-var was_s_pressed: bool = false
-var was_d_pressed: bool = false
-var was_v_pressed: bool = false
-var was_p_pressed: bool = false
-const SERVE_AIM_X_MIN: float = -0.9
-const SERVE_AIM_X_MAX: float = 0.9
-const SERVE_AIM_Z_MIN: float = 0.55  # must clear the kitchen line
-const SERVE_AIM_Z_MAX: float = 1.4
-const SERVE_AIM_SPEED: float = 1.2   # units/sec while holding arrow keys
+# AI auto-swing — fires after a brief reaction window once the ball is in
+# range of the AI character.
+var ai_ready_to_swing: bool = false
+var ai_swing_timer: float = 0.0
+const AI_REACTION_TIME: float = 0.35
+const AI_HIT_RANGE: float = 1.3
+# How close the ball needs to be to the player character for a Space press
+# to count as a connected swing. Generous on purpose.
+const PLAYER_HIT_RANGE: float = 1.4
 
 # Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
 var camera_base_pos: Vector3 = Vector3.ZERO
@@ -99,7 +91,9 @@ func _ready():
 	EventBus.tap_detected.connect(_on_tap_detected)
 	EventBus.double_tap_detected.connect(_on_double_tap)
 	EventBus.drag_detected.connect(_on_drag)
-	ai_manager.ai_shot_selected.connect(_on_ai_shot_selected)
+	# AIManager (decision-tree based) is disabled for the Wii-Sports rework.
+	# AI swing logic now lives inline in Main._process_ai_swing.
+	# ai_manager.ai_shot_selected.connect(_on_ai_shot_selected)
 	match_manager.point_awarded.connect(_on_point_awarded)
 	match_manager.side_out.connect(_on_side_out)
 	match_manager.serve_ready.connect(_on_serve_ready)
@@ -262,82 +256,98 @@ func _start_practice_match() -> void:
 const PLAYER_TEAM_COLOR := Color(0.25, 0.55, 1.0)   # Blue — that's you.
 const OPPONENT_TEAM_COLOR := Color(1.0, 0.45, 0.15)  # Orange — the AI.
 
-func _process_serve_input(delta: float) -> void:
-	# Only active while the player is the server and ball isn't yet launched.
+func _process_serve_input(_delta: float) -> void:
+	# Wii-Sports serve: one tap of Space serves the ball. No aim, no charge.
 	if not (game_state.can_serve() and is_player_serving and player_serve_ready):
-		# Clear power meter if we wander out of serve mode mid-charge.
-		if serve_charging:
-			serve_charging = false
-			serve_charge = 0.0
-			hud.show_power_meter(false)
-		was_space_pressed = false
+		was_space_pressed = Input.is_key_pressed(KEY_SPACE)
 		return
 
-	# WASD *and* arrow keys adjust the serve aim — orange landing marker follows.
-	var step: float = SERVE_AIM_SPEED * delta
-	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
-		serve_aim_x = clampf(serve_aim_x - step, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
-	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
-		serve_aim_x = clampf(serve_aim_x + step, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
-	if Input.is_key_pressed(KEY_UP) or Input.is_key_pressed(KEY_W):
-		serve_aim_z = clampf(serve_aim_z + step, SERVE_AIM_Z_MIN, SERVE_AIM_Z_MAX)
-	if Input.is_key_pressed(KEY_DOWN) or Input.is_key_pressed(KEY_S):
-		serve_aim_z = clampf(serve_aim_z - step, SERVE_AIM_Z_MIN, SERVE_AIM_Z_MAX)
-
-	# Preview the aim on the landing marker.
-	if landing_marker:
-		landing_marker.visible = true
-		landing_marker.global_position = Vector3(serve_aim_x, 0.012, serve_aim_z)
-
-	# Space hold = charge, release = launch at charged power.
 	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
-	if space_now:
-		serve_charging = true
-		serve_charge = minf(serve_charge + delta * 0.8, 1.0)
-		hud.show_power_meter(true)
-		hud.set_power_charge(serve_charge)
-	elif was_space_pressed and serve_charging:
-		# Just released — fire the serve.
-		serve_charging = false
-		hud.show_power_meter(false)
-		var power: float = clampf(0.5 + serve_charge * 0.5, 0.5, 1.0)
-		serve_charge = 0.0
-		_launch_player_serve(power)
-
+	if space_now and not was_space_pressed:
+		_launch_player_serve(0.8)
 	was_space_pressed = space_now
 
 func _process_rally_input() -> void:
-	# Rally-shot keys are only meaningful during PLAY when the ball is on
-	# the player's side. WASD pick shot type; V volleys; P starts power.
-	# Edge-detected so a held key only fires once.
-	var w_now = Input.is_key_pressed(KEY_W)
-	var a_now = Input.is_key_pressed(KEY_A)
-	var s_now = Input.is_key_pressed(KEY_S)
-	var d_now = Input.is_key_pressed(KEY_D)
-	var v_now = Input.is_key_pressed(KEY_V)
-	var p_now = Input.is_key_pressed(KEY_P)
+	# Wii-Sports rally swing: one tap of Space hits the ball when it's on
+	# the player's side. Whether the swing connects depends only on whether
+	# the ball is in PLAYER_HIT_RANGE of the character.
+	# (We don't double-handle Space during SERVE_WAIT — _process_serve_input
+	# owns that phase; here we only act if PLAY is active.)
+	if not (rally_active and ball.is_in_play and ball.position.z < 0):
+		return
+	# Avoid double-firing if both functions ran on the same Space-down.
+	if game_state.can_serve():
+		return
+	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
+	if space_now and not was_space_pressed:
+		_player_swing()
+	was_space_pressed = space_now
 
-	# Only act on key-down edges during rally (and only if player can hit).
-	if rally_active and ball.position.z < 0 and ball.is_in_play:
-		if w_now and not was_w_pressed:
-			EventBus.swipe_detected.emit(Vector2(0, -200), 200.0)   # lob
-		if s_now and not was_s_pressed:
-			EventBus.swipe_detected.emit(Vector2(0, 200), 200.0)    # dink
-		if a_now and not was_a_pressed:
-			EventBus.swipe_detected.emit(Vector2(-200, 0), 200.0)   # cross-court L
-		if d_now and not was_d_pressed:
-			EventBus.swipe_detected.emit(Vector2(200, 0), 200.0)    # cross-court R
-		if v_now and not was_v_pressed:
-			EventBus.tap_detected.emit(Vector2(540, 960))           # volley
-		if p_now and not was_p_pressed:
-			EventBus.double_tap_detected.emit(Vector2(540, 960))    # power start
+# Wii-Sports player swing: forgiving — if the ball is anywhere within
+# PLAYER_HIT_RANGE of the character, the swing connects and the ball flies
+# back toward the opponent's court. Direction is biased by where the ball
+# was relative to the character at contact.
+func _player_swing() -> void:
+	# Don't allow re-hitting a ball we just sent away.
+	if ball.linear_velocity.z > 0.5:
+		return
+	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
+	if dist > PLAYER_HIT_RANGE:
+		hud.show_message("Whiff!")
+		return
+	# Direction-from-position: hit ball.x flips to opposite side for a
+	# crisper cross-court feel. Z target is mid-opponent's court.
+	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-0.15, 0.15), -0.8, 0.8)
+	var target_z: float = OPPONENT_BASELINE - randf_range(0.2, 0.6)
+	var target := Vector3(target_x, 0, target_z)
+	# Reuse ball.serve()'s projectile math for an honest landing target.
+	ball.serve(ball.position, target, 0.75)
+	ball.last_hitter_id = 0
+	last_player_shot_type = BallRef.ShotType.DRIVE
+	EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, 0.75)
+	_announce_shot(BallRef.ShotType.DRIVE)
+	match_manager.record_hit()
+	_animate_paddle_swing(player)
 
-	was_w_pressed = w_now
-	was_a_pressed = a_now
-	was_s_pressed = s_now
-	was_d_pressed = d_now
-	was_v_pressed = v_now
-	was_p_pressed = p_now
+# Wii-Sports AI auto-swing: once the ball is on the AI's side and within
+# AI_HIT_RANGE of the AI character, fire a swing after a short reaction
+# window. No decision tree, no shot types — just send the ball back.
+func _process_ai_swing(delta: float) -> void:
+	if not (rally_active and ball.is_in_play) or ball.position.z < 0:
+		ai_ready_to_swing = false
+		ai_swing_timer = 0.0
+		return
+	# Ball must be approaching the AI side (vz > 0). After AI hits, ball
+	# moves toward player (vz negative) — bail so AI doesn't re-swing its
+	# own outgoing ball.
+	if ball.linear_velocity.z < -0.3:
+		ai_ready_to_swing = false
+		ai_swing_timer = 0.0
+		return
+	if total_bounces_in_rally < 1:
+		return  # let the serve actually bounce before AI tries to hit
+	if ai_ready_to_swing:
+		ai_swing_timer -= delta
+		if ai_swing_timer <= 0.0:
+			ai_ready_to_swing = false
+			_ai_swing()
+		return
+	var dist: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
+	if dist <= AI_HIT_RANGE:
+		ai_ready_to_swing = true
+		ai_swing_timer = AI_REACTION_TIME
+
+func _ai_swing() -> void:
+	if not rally_active or not ball.is_in_play:
+		return
+	var target_x: float = clampf(-ball.position.x * 0.5 + randf_range(-0.3, 0.3), -0.8, 0.8)
+	var target_z: float = PLAYER_BASELINE + randf_range(0.2, 0.6)
+	var target := Vector3(target_x, 0, target_z)
+	ball.serve(ball.position, target, 0.75)
+	ball.last_hitter_id = 1
+	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.75)
+	match_manager.record_hit()
+	_animate_paddle_swing(opponent)
 
 func _launch_player_serve(power: float) -> void:
 	if not player_serve_ready:
@@ -345,7 +355,9 @@ func _launch_player_serve(power: float) -> void:
 	player_serve_ready = false
 	game_state.transition_to(GameStateRef.State.SERVE_ACTIVE)
 
-	var target := Vector3(serve_aim_x, 0, serve_aim_z)
+	# Wii-Sports serve: fixed target in the middle of the opponent's
+	# mid-court with a small random nudge.
+	var target := Vector3(randf_range(-0.3, 0.3), 0, 0.7)
 	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
 
@@ -457,6 +469,7 @@ func _process(delta: float) -> void:
 	_update_landing_marker()
 	_process_serve_input(delta)
 	_process_rally_input()
+	_process_ai_swing(delta)
 	_check_ball_stuck(delta)
 
 	# Make characters look toward the ball each frame
@@ -475,38 +488,40 @@ func _update_player_auto_move(delta: float) -> void:
 	var opp_target_x = 0.0
 
 	if ball.is_in_play:
-		# Characters HOLD their baseline z. Only lateral (x) lean to track
-		# the ball, so the player doesn't feel like the character is
-		# auto-running to the landing spot. Ball.hit() applies the new
-		# velocity wherever the ball actually is, so the character not
-		# being on top of the ball is purely cosmetic.
+		# Wii-Sports auto-positioning: whoever's side the ball is on runs to
+		# meet it at its predicted landing. The other side drifts back to
+		# their baseline with a slight lateral lean while they wait.
+		var landing: Vector3 = _predict_ball_landing()
 		if is_doubles:
-			if ball.position.z < 0:
-				if ball.position.x < 0:
-					player_target_z = PLAYER_BASELINE
-					player_target_x = clampf(ball.position.x, -0.5, 0.0)
-				else:
-					player_target_z = PLAYER_BASELINE
-					player_target_x = PLAYER_LEFT
-			if ball.position.z > 0 and ball.position.x < 0:
+			# Doubles still uses the old simple zone coverage.
+			if ball.position.z < 0 and ball.position.x < 0:
+				player_target_z = PLAYER_BASELINE
+				player_target_x = clampf(ball.position.x, -0.5, 0.0)
+			elif ball.position.z > 0 and ball.position.x < 0:
 				opp_target_z = OPPONENT_BASELINE
 				opp_target_x = clampf(ball.position.x, -0.5, 0.0)
 		else:
-			# Singles: both characters lean toward the ball.
-			player_target_z = PLAYER_BASELINE
-			opp_target_z = OPPONENT_BASELINE
-			# Stronger lateral lean when the ball is on your side, mild
-			# tracking when it's on the opponent's.
 			if ball.position.z < 0:
-				player_target_x = clampf(ball.position.x * 0.7, -0.5, 0.5)
+				# Ball is coming to the player — auto-run there.
+				var plx: float = landing.x if landing.z < -0.05 else ball.position.x
+				var plz: float = landing.z if landing.z < -0.05 else ball.position.z
+				player_target_x = clampf(plx, -0.9, 0.9)
+				player_target_z = clampf(plz + 0.1, -1.4, -0.55)
 				opp_target_x = clampf(ball.position.x * 0.3, -0.4, 0.4)
+				opp_target_z = OPPONENT_BASELINE
 			else:
+				# Ball heading to the AI — AI runs there, player drifts back.
+				var olx: float = landing.x if landing.z > 0.05 else ball.position.x
+				var olz: float = landing.z if landing.z > 0.05 else ball.position.z
+				opp_target_x = clampf(olx, -0.9, 0.9)
+				opp_target_z = clampf(olz - 0.1, 0.55, 1.4)
 				player_target_x = clampf(ball.position.x * 0.3, -0.4, 0.4)
-				opp_target_x = clampf(ball.position.x * 0.7, -0.5, 0.5)
+				player_target_z = PLAYER_BASELINE
 
-	# Move rate per second. Characters need to keep visible pace with the
-	# ball (which travels 3–6 units/sec) so the user can read what's happening.
-	var move_rate: float = delta * 5.0
+	# Move rate per second. Wii-Sports auto-positioning wants characters to
+	# almost always reach the ball — they need to be slightly faster than
+	# the ball's horizontal pace.
+	var move_rate: float = delta * 6.0
 	player.position.x = move_toward(player.position.x, player_target_x, move_rate)
 	player.position.z = move_toward(player.position.z, player_target_z, move_rate)
 
@@ -642,16 +657,11 @@ func _on_serve_ready(server_id: int, _side: int) -> void:
 	
 	if is_player_serving:
 		player_serve_ready = true
-		hud.show_serve_indicator("Aim with arrows · Hold Space to charge · Release to serve")
+		hud.show_serve_indicator("Press Space to serve")
 		player.position = Vector3(0, 0, PLAYER_BASELINE)
 		ball.hold_for_serve(Vector3(0, 0.5, PLAYER_BASELINE + 0.05))
-		# Reset aim to a sensible default each new serve.
-		serve_aim_x = 0.0
-		serve_aim_z = 0.7
-		serve_charging = false
-		serve_charge = 0.0
 	else:
-		hud.show_serve_indicator("Opponent serving...")
+		hud.show_serve_indicator("Opponent serving…")
 		_reset_for_ai_serve()
 
 # === SERVE FLOW (Doubles) ===
@@ -745,15 +755,9 @@ func _handle_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 		hud.show_serve_indicator("Serve must be underhand!")
 		return
 
-	player_serve_ready = false
-	game_state.transition_to(GameStateRef.State.SERVE_ACTIVE)
-
-	var power = clampf(velocity.length() / 300.0, 0.5, 1.0)
-	# Mobile swipe-serve also uses the current aim. Sideways swipe nudges aim.
-	if absf(velocity.x) > 30:
-		var nudge: float = clampf(velocity.x / 600.0, -0.4, 0.4)
-		serve_aim_x = clampf(serve_aim_x + nudge, SERVE_AIM_X_MIN, SERVE_AIM_X_MAX)
-	_launch_player_serve(power)
+	# Wii-Sports mobile swipe-serve: ignore velocity/direction details,
+	# just commit a default-power serve.
+	_launch_player_serve(0.8)
 
 func _handle_doubles_player_serve(swipe_dir: String, velocity: Vector2) -> void:
 	if swipe_dir != "up":
@@ -993,12 +997,7 @@ func _update_turn_indicator() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
 	if ball.position.z < 0:
-		# Ball on player's side. If we're in the two-bounce phase and the
-		# ball hasn't bounced on our side yet, warn the user not to volley.
-		if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
-			hud.show_serve_indicator("Wait for the bounce…")
-		else:
-			hud.show_serve_indicator("Your turn — swipe!")
+		hud.show_serve_indicator("SPACE to swing!")
 	else:
 		hud.show_serve_indicator("")
 
@@ -1200,6 +1199,9 @@ func _reset_rally() -> void:
 	rally_active = false
 	bounces_since_last_hit = 0
 	total_bounces_in_rally = 0
+	ai_ready_to_swing = false
+	ai_swing_timer = 0.0
+	was_space_pressed = false
 	match_manager.reset_rally()
 	ai_manager.reset()
 	ball.reset()

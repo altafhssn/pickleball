@@ -40,7 +40,7 @@ func show_serve_indicator(text: String) -> void:
 
 func show_gesture_guide(visible_flag: bool) -> void:
 	if visible_flag:
-		gesture_guide.text = "Serve: arrows aim · hold Space (release to launch)\nRally: W Lob · S Dink · A/D Cross · V Volley · P Power"
+		gesture_guide.text = "Press SPACE to serve · Press SPACE to swing\n(your character runs to the ball automatically)"
 	else:
 		gesture_guide.text = ""
 
