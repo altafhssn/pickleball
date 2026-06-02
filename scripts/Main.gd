@@ -505,8 +505,8 @@ func _on_touch_move(direction: Vector2) -> void:
 func _spawn_swing_zone_ring() -> void:
 	swing_zone_ring = MeshInstance3D.new()
 	var torus: TorusMesh = TorusMesh.new()
-	torus.inner_radius = 0.22
-	torus.outer_radius = 0.28
+	torus.inner_radius = 0.11
+	torus.outer_radius = 0.14
 	torus.rings = 24
 	torus.ring_segments = 8
 	swing_zone_ring.mesh = torus
