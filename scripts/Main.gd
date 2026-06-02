@@ -90,11 +90,6 @@ var landing_marker: MeshInstance3D = null
 # Swing-zone ring around the player character: colour-coded by how perfect
 # a swing would be right now.
 var swing_zone_ring: MeshInstance3D = null
-# Power-meter semicircle in front of the player — fills up segment-by-segment
-# as the ball gets closer to perfect contact range.
-var power_segments: Array[MeshInstance3D] = []
-const POWER_SEGMENT_COUNT: int = 7
-const POWER_METER_RADIUS: float = 0.35
 const PERFECT_DIST: float = 0.7
 const GOOD_DIST: float = 1.3
 
@@ -150,7 +145,6 @@ func _ready():
 	# Spawn the landing marker (hidden until first serve).
 	_spawn_landing_marker()
 	_spawn_swing_zone_ring()
-	_spawn_power_meter()
 
 	# Spawn the on-screen touch controls overlay.
 	_spawn_touch_controls()
@@ -537,76 +531,6 @@ func _touch_hit(shot_type: int) -> void:
 func _on_touch_move(direction: Vector2) -> void:
 	touch_move_dir = direction
 
-func _spawn_power_meter() -> void:
-	# Build POWER_SEGMENT_COUNT small flat boxes that we'll arrange in a
-	# half-circle in front of the player every frame.
-	for _i in POWER_SEGMENT_COUNT:
-		var seg: MeshInstance3D = MeshInstance3D.new()
-		var box: BoxMesh = BoxMesh.new()
-		box.size = Vector3(0.07, 0.005, 0.13)
-		seg.mesh = box
-		var mat: StandardMaterial3D = StandardMaterial3D.new()
-		mat.albedo_color = Color(0.2, 0.2, 0.25, 0.35)
-		mat.emission_enabled = true
-		mat.emission = Color(0.2, 0.2, 0.25)
-		mat.emission_energy_multiplier = 0.4
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		seg.material_override = mat
-		seg.visible = false
-		add_child(seg)
-		power_segments.append(seg)
-
-func _update_power_meter_segments() -> void:
-	if power_segments.is_empty():
-		return
-	# Only visible while the ball is approaching the player on their side.
-	var show: bool = rally_active and ball.is_in_play \
-		and ball.position.z < 0 \
-		and ball.linear_velocity.z <= 0.5
-	if not show:
-		for seg in power_segments:
-			seg.visible = false
-		return
-
-	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
-	# 0 when out of hit range, 1 when at perfect distance.
-	var power_pct: float = 1.0 - clampf((dist - PERFECT_DIST) / maxf(PLAYER_HIT_RANGE - PERFECT_DIST, 0.01), 0.0, 1.0)
-	var lit_count: int = int(round(power_pct * POWER_SEGMENT_COUNT))
-
-	var color_lit: Color
-	if power_pct > 0.85:
-		color_lit = Color(0.15, 1.0, 0.35)        # green — perfect
-	elif power_pct > 0.55:
-		color_lit = Color(1.0, 0.95, 0.2)         # yellow — good
-	elif power_pct > 0.2:
-		color_lit = Color(1.0, 0.55, 0.15)        # orange — ok
-	else:
-		color_lit = Color(1.0, 0.25, 0.25)        # red — far
-
-	# Arrange segments in a half-circle in FRONT of the player (toward the
-	# net, which is +z for our player at -z).
-	for i in POWER_SEGMENT_COUNT:
-		var seg: MeshInstance3D = power_segments[i]
-		seg.visible = true
-		var fraction: float = float(i) / float(POWER_SEGMENT_COUNT - 1)
-		var angle: float = lerpf(-PI * 0.45, PI * 0.45, fraction)
-		seg.global_position = Vector3(
-			player.position.x + sin(angle) * POWER_METER_RADIUS,
-			0.02,
-			player.position.z + 0.18 + cos(angle) * 0.05
-		)
-		seg.rotation.y = -angle
-		var mat: StandardMaterial3D = seg.material_override as StandardMaterial3D
-		if i < lit_count:
-			mat.albedo_color = color_lit
-			mat.emission = color_lit
-			mat.emission_energy_multiplier = 1.2
-		else:
-			mat.albedo_color = Color(0.18, 0.18, 0.22, 0.5)
-			mat.emission = Color(0.18, 0.18, 0.22)
-			mat.emission_energy_multiplier = 0.3
-
 func _spawn_swing_zone_ring() -> void:
 	swing_zone_ring = MeshInstance3D.new()
 	var torus: TorusMesh = TorusMesh.new()
@@ -756,7 +680,6 @@ func _process(delta: float) -> void:
 	_update_turn_indicator()
 	_update_landing_marker()
 	_update_swing_zone_ring()
-	_update_power_meter_segments()
 	_process_serve_input(delta)
 	_process_rally_input()
 	_process_ai_swing(delta)
