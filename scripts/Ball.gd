@@ -94,6 +94,20 @@ func _on_body_entered(body: Node) -> void:
 		var side: int = 0 if global_position.z < 0 else 1
 		ball_landed.emit(global_position, side)
 		EventBus.ball_bounced.emit(global_position, side)
+		# Visible-bounce guarantee. The engine's bounce response only
+		# preserves bounce * |incoming_vy|; for shallow-angle shots the
+		# vy at impact is tiny and the ball appears to slide. If we have
+		# meaningful horizontal speed but negligible post-bounce lift,
+		# force a visible upward kick. Deferred so we run after the
+		# engine has applied its own bounce response.
+		call_deferred("_ensure_visible_bounce")
+
+func _ensure_visible_bounce() -> void:
+	const MIN_BOUNCE_VY: float = 0.9
+	const HORIZ_THRESHOLD: float = 1.0
+	var horiz_speed: float = Vector2(linear_velocity.x, linear_velocity.z).length()
+	if linear_velocity.y >= 0.0 and linear_velocity.y < MIN_BOUNCE_VY and horiz_speed > HORIZ_THRESHOLD:
+		linear_velocity.y = MIN_BOUNCE_VY
 
 func hold_for_serve(at_position: Vector3) -> void:
 	# Park the ball mid-air for the serve setup. Freeze so gravity doesn't
