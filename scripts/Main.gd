@@ -53,8 +53,17 @@ const PLAYER_RIGHT: float = 0.5
 const PLAYER_BASELINE: float = -1.3
 const OPPONENT_BASELINE: float = 1.3
 
-# On-screen touch controls instance (instantiated in _ready).
-var touch_controls: CanvasLayer = null
+# On-screen touch controls — all built programmatically in _ready so they
+# can't be foiled by .tscn loading issues.
+var touch_layer: CanvasLayer = null
+var touch_btn_serve: Button = null
+var touch_btn_lob: Button = null
+var touch_btn_drive: Button = null
+var touch_btn_dink: Button = null
+var touch_btn_up: Button = null
+var touch_btn_down: Button = null
+var touch_btn_left: Button = null
+var touch_btn_right: Button = null
 var touch_move_dir: Vector2 = Vector2.ZERO
 # Wii-Sports-style one-button gameplay state. Two trackers because serve
 # and rally share the Space key and we want both to edge-detect cleanly.
@@ -367,19 +376,100 @@ func _launch_player_serve(power: float) -> void:
 	game_state.transition_to(GameStateRef.State.PLAY)
 	hud.show_serve_indicator("")
 	hud.show_gesture_guide(true)
-	if touch_controls:
-		touch_controls.show_serve_button(false)
-		touch_controls.show_shot_buttons(true)
+	_set_touch_serve_button_visible(false)
+	_set_touch_shot_buttons_visible(true)
 
 func _spawn_touch_controls() -> void:
-	var scene: PackedScene = load("res://scenes/UI/TouchControls.tscn")
-	touch_controls = scene.instantiate()
-	add_child(touch_controls)
-	touch_controls.serve_pressed.connect(_on_touch_serve)
-	touch_controls.lob_pressed.connect(_on_touch_lob)
-	touch_controls.drive_pressed.connect(_on_touch_drive)
-	touch_controls.dink_pressed.connect(_on_touch_dink)
-	touch_controls.move_input.connect(_on_touch_move)
+	# Build the touch controls overlay programmatically — no scene file,
+	# no @onready, no preset confusion. Anchors set explicitly so the
+	# buttons land in the corners regardless of window aspect.
+	touch_layer = CanvasLayer.new()
+	touch_layer.name = "TouchControls"
+	touch_layer.layer = 10
+	add_child(touch_layer)
+
+	touch_btn_serve = _make_touch_button("SERVE", Vector2(-320, -260), Vector2(-50, -110), 56, Color(1.0, 0.55, 0.1, 0.95))
+	touch_btn_serve.pressed.connect(_on_touch_serve)
+	touch_btn_serve.visible = false
+
+	touch_btn_lob = _make_touch_button("LOB", Vector2(-280, -360), Vector2(-70, -270), 42, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_lob.pressed.connect(_on_touch_lob)
+	touch_btn_drive = _make_touch_button("DRIVE", Vector2(-280, -250), Vector2(-70, -160), 42, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_drive.pressed.connect(_on_touch_drive)
+	touch_btn_dink = _make_touch_button("DINK", Vector2(-280, -140), Vector2(-70, -50), 42, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_dink.pressed.connect(_on_touch_dink)
+	_set_touch_shot_buttons_visible(false)
+
+	# D-pad on the left side — visible always.
+	touch_btn_up = _make_touch_button_left("▲", Vector2(155, -340), Vector2(235, -260), 44)
+	touch_btn_down = _make_touch_button_left("▼", Vector2(155, -170), Vector2(235, -90), 44)
+	touch_btn_left = _make_touch_button_left("◀", Vector2(70, -255), Vector2(150, -175), 44)
+	touch_btn_right = _make_touch_button_left("▶", Vector2(240, -255), Vector2(320, -175), 44)
+
+func _make_touch_button(text: String, top_left: Vector2, bottom_right: Vector2, font_size: int, bg: Color) -> Button:
+	# Right-anchored — offsets are negative (measured from the right/bottom edges).
+	var b: Button = Button.new()
+	b.text = text
+	b.anchor_left = 1.0
+	b.anchor_top = 1.0
+	b.anchor_right = 1.0
+	b.anchor_bottom = 1.0
+	b.offset_left = top_left.x
+	b.offset_top = top_left.y
+	b.offset_right = bottom_right.x
+	b.offset_bottom = bottom_right.y
+	b.add_theme_font_size_override("font_size", font_size)
+	b.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	_apply_touch_button_style(b, bg)
+	touch_layer.add_child(b)
+	return b
+
+func _make_touch_button_left(text: String, top_left: Vector2, bottom_right: Vector2, font_size: int) -> Button:
+	# Left-anchored — offsets are positive from the left edge, negative from bottom.
+	var b: Button = Button.new()
+	b.text = text
+	b.anchor_left = 0.0
+	b.anchor_top = 1.0
+	b.anchor_right = 0.0
+	b.anchor_bottom = 1.0
+	b.offset_left = top_left.x
+	b.offset_top = top_left.y
+	b.offset_right = bottom_right.x
+	b.offset_bottom = bottom_right.y
+	b.add_theme_font_size_override("font_size", font_size)
+	b.add_theme_color_override("font_color", Color(1, 1, 1, 1))
+	_apply_touch_button_style(b, Color(0.1, 0.1, 0.15, 0.9))
+	touch_layer.add_child(b)
+	return b
+
+func _apply_touch_button_style(b: Button, bg: Color) -> void:
+	var sb: StyleBoxFlat = StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = Color(1, 1, 1, 0.85)
+	sb.border_width_left = 3
+	sb.border_width_top = 3
+	sb.border_width_right = 3
+	sb.border_width_bottom = 3
+	sb.corner_radius_top_left = 16
+	sb.corner_radius_top_right = 16
+	sb.corner_radius_bottom_left = 16
+	sb.corner_radius_bottom_right = 16
+	b.add_theme_stylebox_override("normal", sb)
+	b.add_theme_stylebox_override("hover", sb)
+	b.add_theme_stylebox_override("pressed", sb)
+	b.add_theme_stylebox_override("focus", sb)
+
+func _set_touch_serve_button_visible(yes: bool) -> void:
+	if touch_btn_serve:
+		touch_btn_serve.visible = yes
+
+func _set_touch_shot_buttons_visible(yes: bool) -> void:
+	if touch_btn_lob:
+		touch_btn_lob.visible = yes
+	if touch_btn_drive:
+		touch_btn_drive.visible = yes
+	if touch_btn_dink:
+		touch_btn_dink.visible = yes
 
 func _on_touch_serve() -> void:
 	if game_state.can_serve() and is_player_serving and player_serve_ready:
@@ -715,14 +805,12 @@ func _on_serve_ready(server_id: int, _side: int) -> void:
 		hud.show_serve_indicator("Tap SERVE to serve")
 		player.position = Vector3(0, 0, PLAYER_BASELINE)
 		ball.hold_for_serve(Vector3(0, 0.5, PLAYER_BASELINE + 0.05))
-		if touch_controls:
-			touch_controls.show_serve_button(true)
-			touch_controls.show_shot_buttons(false)
+		_set_touch_serve_button_visible(true)
+		_set_touch_shot_buttons_visible(false)
 	else:
 		hud.show_serve_indicator("Opponent serving…")
-		if touch_controls:
-			touch_controls.show_serve_button(false)
-			touch_controls.show_shot_buttons(false)
+		_set_touch_serve_button_visible(false)
+		_set_touch_shot_buttons_visible(false)
 		_reset_for_ai_serve()
 
 # === SERVE FLOW (Doubles) ===
@@ -1102,9 +1190,8 @@ func _on_ball_hit_net() -> void:
 
 func _on_point_awarded(scorer_id: int, reason: String) -> void:
 	rally_active = false
-	if touch_controls:
-		touch_controls.show_serve_button(false)
-		touch_controls.show_shot_buttons(false)
+	_set_touch_serve_button_visible(false)
+	_set_touch_shot_buttons_visible(false)
 
 	# Celebrate if the player or player's partner (in doubles) scored
 	if scorer_id == 0:
