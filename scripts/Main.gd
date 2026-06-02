@@ -386,8 +386,14 @@ func _process_ai_swing(delta: float) -> void:
 		ai_swing_timer -= delta
 		if ai_swing_timer <= 0.0:
 			ai_ready_to_swing = false
-			ai_just_swung = true
-			_ai_swing()
+			# Re-check distance at swing time — if the ball moved out of
+			# range during the reaction window, AI whiffs (no hit, last
+			# hitter unchanged, so the eventual fault goes to the right
+			# side).
+			var dist_now: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
+			if dist_now <= AI_HIT_RANGE:
+				ai_just_swung = true
+				_ai_swing()
 		return
 	var dist: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
 	if dist <= AI_HIT_RANGE:
