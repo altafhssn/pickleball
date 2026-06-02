@@ -73,8 +73,11 @@ var was_rally_space_pressed: bool = false
 # range of the AI character.
 var ai_ready_to_swing: bool = false
 var ai_swing_timer: float = 0.0
-const AI_REACTION_TIME: float = 0.35
-const AI_HIT_RANGE: float = 1.95
+# Flag set when AI just swung; cleared when the ball crosses back to the
+# player's side. Prevents the AI from re-hitting its own outgoing ball.
+var ai_just_swung: bool = false
+const AI_REACTION_TIME: float = 0.20
+const AI_HIT_RANGE: float = 2.50
 # How close the ball needs to be to the player character for a Space press
 # to count as a connected swing. Generous on purpose.
 const PLAYER_HIT_RANGE: float = 2.1
@@ -354,23 +357,26 @@ func _player_swing_with_shot(shot_type: int) -> void:
 # AI_HIT_RANGE of the AI character, fire a swing after a short reaction
 # window. No decision tree, no shot types — just send the ball back.
 func _process_ai_swing(delta: float) -> void:
-	if not (rally_active and ball.is_in_play) or ball.position.z < 0:
+	# When the ball is back on the player's side, reset everything.
+	if ball.position.z < 0:
+		ai_ready_to_swing = false
+		ai_swing_timer = 0.0
+		ai_just_swung = false
+		return
+	if not (rally_active and ball.is_in_play):
 		ai_ready_to_swing = false
 		ai_swing_timer = 0.0
 		return
-	# Ball must be approaching the AI side (vz > 0). After AI hits, ball
-	# moves toward player (vz negative) — bail so AI doesn't re-swing its
-	# own outgoing ball.
-	if ball.linear_velocity.z < -0.3:
-		ai_ready_to_swing = false
-		ai_swing_timer = 0.0
+	# Don't re-hit a ball we just sent away.
+	if ai_just_swung:
 		return
 	if total_bounces_in_rally < 1:
-		return  # let the serve actually bounce before AI tries to hit
+		return  # wait for the serve to bounce first
 	if ai_ready_to_swing:
 		ai_swing_timer -= delta
 		if ai_swing_timer <= 0.0:
 			ai_ready_to_swing = false
+			ai_just_swung = true
 			_ai_swing()
 		return
 	var dist: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
@@ -1379,6 +1385,7 @@ func _reset_rally() -> void:
 	total_bounces_in_rally = 0
 	ai_ready_to_swing = false
 	ai_swing_timer = 0.0
+	ai_just_swung = false
 	was_serve_space_pressed = false
 	was_rally_space_pressed = false
 	match_manager.reset_rally()
