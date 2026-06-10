@@ -132,11 +132,15 @@ func _find_skeleton(root: Node) -> Skeleton3D:
 
 func _autoscale_model() -> void:
 	# Measure the model's combined AABB and scale it to target_height, so the
-	# import scale (cm vs m) doesn't matter.
+	# import scale (cm vs m) doesn't matter. Clamped + logged because a bad
+	# measurement here produces a skyscraper that shadows the whole court.
 	var aabb: AABB = _combined_aabb(model)
+	print("CharacterVisual: raw model height = %.3f" % aabb.size.y)
+	var s: float = 0.5  # sane fallback for a metre-scale rig
 	if aabb.size.y > 0.001:
-		var s: float = target_height / aabb.size.y
-		model.scale = Vector3(s, s, s)
+		s = clampf(target_height / aabb.size.y, 0.001, 10.0)
+	model.scale = Vector3(s, s, s)
+	print("CharacterVisual: applied model scale = %.4f" % s)
 
 func _combined_aabb(root: Node) -> AABB:
 	var result: AABB = AABB()
@@ -192,9 +196,17 @@ func _attach_paddle() -> void:
 	skeleton.add_child(attachment)
 	var paddle: Node3D = paddle_scene.instantiate()
 	attachment.add_child(paddle)
-	# The paddle FBX was authored at the same real-world scale as the rig,
-	# but it parents under the skeleton (which already carries model.scale),
-	# so no extra scaling here. Orientation may need tuning after first look.
+	# Auto-scale the paddle in WORLD space so a unit mismatch between the
+	# paddle FBX and the rig (cm vs m) can't produce a court-sized paddle.
+	# Real paddle ≈ 0.4 m vs 1.8 m human → ~22% of character height.
+	var paddle_aabb: AABB = _combined_aabb(paddle)
+	var longest: float = maxf(paddle_aabb.size.x, maxf(paddle_aabb.size.y, paddle_aabb.size.z))
+	print("CharacterVisual: raw paddle longest axis (world) = %.3f" % longest)
+	if longest > 0.001:
+		var desired: float = 0.22 * target_height
+		var ps: float = clampf(desired / longest, 0.0001, 100.0)
+		paddle.scale = paddle.scale * ps
+		print("CharacterVisual: applied paddle scale = %.4f" % ps)
 
 func _find_hand_bone() -> int:
 	# Mixamo: "mixamorig:RightHand" → Godot import renames to
