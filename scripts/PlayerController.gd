@@ -134,5 +134,12 @@ func look_at_ball(ball_position: Vector3) -> void:
 	var dir_2d = Vector2(relative_pos.x, relative_pos.z)
 	if dir_2d.length() < 0.01:
 		return
+	# Absolute yaw that would point the node's +Z at the ball.
 	var angle = atan2(relative_pos.x, relative_pos.z)
-	target_yaw = clampf(angle, -MAX_YAW, MAX_YAW)
+	# Each side has a natural facing: the player (-z side) faces +z (base 0),
+	# the opponent (+z side) faces -z (base PI). Clamp the look-at to a small
+	# turn around that base so both characters face each other across the
+	# net instead of sharing one world direction.
+	var base_yaw: float = 0.0 if global_position.z < 0.0 else PI
+	var offset: float = wrapf(angle - base_yaw, -PI, PI)
+	target_yaw = base_yaw + clampf(offset, -MAX_YAW, MAX_YAW)
