@@ -156,18 +156,46 @@ func _combined_aabb(root: Node) -> AABB:
 	return result
 
 func _collect_animations() -> void:
-	# Pull the (single) animation out of every source FBX into one library
-	# on the base model's AnimationPlayer, renamed to our clean names.
-	var lib: AnimationLibrary = AnimationLibrary.new()
+	# Pull the (single) animation out of every source FBX into the base
+	# model's AnimationPlayer, renamed to our clean names.
+	#
+	# The imported AnimationPlayer already owns a default "" library (with
+	# the FBX's own take) — reuse it; adding a second library named ""
+	# would fail and leave us with zero animations (frozen bind pose).
+	var lib: AnimationLibrary
+	if anim_player.has_animation_library(""):
+		lib = anim_player.get_animation_library("")
+	else:
+		lib = AnimationLibrary.new()
+		anim_player.add_animation_library("", lib)
+
+	# All animation track paths must point at OUR skeleton. Tracks exported
+	# from the other FBX files reference their own scene's node names, so we
+	# rewrite every bone track onto the base model's skeleton path.
+	var anim_root: Node = anim_player.get_node(anim_player.root_node)
+	var skel_path: String = String(anim_root.get_path_to(skeleton))
+
 	for clean_name: String in ANIM_SOURCES:
 		var anim: Animation = _extract_animation(ANIM_SOURCES[clean_name])
 		if anim == null:
+			push_warning("CharacterVisual: no animation in %s" % ANIM_SOURCES[clean_name])
 			continue
+		_remap_tracks_to_skeleton(anim, skel_path)
 		if clean_name in LOOPED_ANIMS:
 			anim.loop_mode = Animation.LOOP_LINEAR
+		if lib.has_animation(clean_name):
+			lib.remove_animation(clean_name)
 		lib.add_animation(clean_name, anim)
-	# Global library name "" lets us play("idle") without a prefix.
-	anim_player.add_animation_library("", lib)
+	print("CharacterVisual: animations ready → ", anim_player.get_animation_list())
+
+func _remap_tracks_to_skeleton(anim: Animation, skel_path: String) -> void:
+	# Bone tracks are "path/to/Skeleton3D:bone_name". Keep the bone part,
+	# replace the node part with our skeleton's path.
+	for i: int in anim.get_track_count():
+		var old_path: NodePath = anim.track_get_path(i)
+		var bone: String = old_path.get_concatenated_subnames()
+		if bone != "":
+			anim.track_set_path(i, NodePath(skel_path + ":" + bone))
 
 func _extract_animation(path: String) -> Animation:
 	var scene: PackedScene = load(path)
