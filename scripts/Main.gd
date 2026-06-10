@@ -637,13 +637,35 @@ func _apply_team_colors() -> void:
 func _tint_character(character: Node3D, color: Color) -> void:
 	if character == null:
 		return
+	# Paint the placeholder capsule if it's still visible (pre-rig fallback).
 	var body: MeshInstance3D = character.get_node_or_null("Body") as MeshInstance3D
-	if body == null:
+	if body != null and body.visible:
+		var mat: StandardMaterial3D = StandardMaterial3D.new()
+		mat.albedo_color = color
+		mat.roughness = 0.5
+		body.material_override = mat
+	# Team ring on the floor under the character — works for both the rigged
+	# model (which we don't want to paint blue/orange) and the placeholder.
+	if character.get_node_or_null("TeamRing") != null:
 		return
-	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.5
-	body.material_override = mat
+	var ring: MeshInstance3D = MeshInstance3D.new()
+	ring.name = "TeamRing"
+	var torus: TorusMesh = TorusMesh.new()
+	torus.inner_radius = 0.16
+	torus.outer_radius = 0.20
+	torus.rings = 24
+	torus.ring_segments = 8
+	ring.mesh = torus
+	var ring_mat: StandardMaterial3D = StandardMaterial3D.new()
+	ring_mat.albedo_color = Color(color.r, color.g, color.b, 0.85)
+	ring_mat.emission_enabled = true
+	ring_mat.emission = color
+	ring_mat.emission_energy_multiplier = 0.5
+	ring_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ring.material_override = ring_mat
+	ring.position = Vector3(0, 0.02, 0)
+	character.add_child(ring)
 
 func _hide_doubles_characters() -> void:
 	is_doubles = false
@@ -814,6 +836,14 @@ func release_power_shot() -> void:
 # === PADDLE SWING ===
 
 func _animate_paddle_swing(character: Node3D) -> void:
+	# Rigged characters play a real smash animation; side picks left/right
+	# arm based on where the ball is relative to the character.
+	if character.has_method("play_swing") and character.has_method("is_animated") and character.is_animated():
+		var facing_sign: float = 1.0 if character.global_position.z < 0.0 else -1.0
+		var side: float = (ball.position.x - character.global_position.x) * facing_sign
+		character.play_swing(side)
+		return
+	# Placeholder fallback: rotate the box paddle.
 	var paddle = character.get_node("Paddle") if character.has_node("Paddle") else null
 	if not paddle:
 		return
@@ -1287,7 +1317,15 @@ func _on_side_out(new_server_id: int, reason: String) -> void:
 func _on_match_over(winner_id: int, final_scores: Array) -> void:
 	var player_won = winner_id == 0
 	var msg = "You win!" if player_won else "Opponent wins!"
-	
+
+	# Victory / defeat poses (held until the next match resets them).
+	var winner_char: Node3D = player if player_won else opponent
+	var loser_char: Node3D = opponent if player_won else player
+	if winner_char and winner_char.has_method("celebrate"):
+		winner_char.celebrate()
+	if loser_char and loser_char.has_method("play_defeat"):
+		loser_char.play_defeat()
+
 	# Grant progression rewards
 	var perf_score = 1.0 if player_won else 0.3
 	var rewards = PlayerData.grant_match_rewards(perf_score)
