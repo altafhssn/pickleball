@@ -9,6 +9,8 @@ extends CanvasLayer
 @onready var gesture_guide: Label = $GestureGuide
 
 var message_timer: float = 0.0
+# Gesture guide fades out after a few seconds so it doesn't clutter play.
+var guide_timer: float = 0.0
 
 func _ready():
 	_set_score_bbcode(0, 0)
@@ -25,6 +27,10 @@ func _process(delta: float) -> void:
 		if message_timer <= 0:
 			message_label.text = ""
 			message_label.modulate = Color(1, 1, 1, 1)
+	if guide_timer > 0:
+		guide_timer -= delta
+		if guide_timer <= 0:
+			gesture_guide.text = ""
 
 const PLAYER_COLOR := Color(0.27, 0.53, 1.0)   # Blue — matches the player character
 const OPPONENT_COLOR := Color(1.0, 0.5, 0.2)   # Orange — matches the AI character
@@ -41,8 +47,10 @@ func show_serve_indicator(text: String) -> void:
 func show_gesture_guide(visible_flag: bool) -> void:
 	if visible_flag:
 		gesture_guide.text = "Press SPACE to serve · Press SPACE to swing\n(your character runs to the ball automatically)"
+		guide_timer = 10.0
 	else:
 		gesture_guide.text = ""
+		guide_timer = 0.0
 
 func show_message(text: String, color: Color = Color(1, 1, 1, 1)) -> void:
 	message_label.text = text

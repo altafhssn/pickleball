@@ -133,9 +133,11 @@ func _ready():
 	# Place the camera behind the player (player is at -z) so the human
 	# sees their own (blue) character in the foreground. Closer position
 	# and narrower FOV make the court fill more of the screen.
-	camera.position = Vector3(0, 2.8, -4.2)
-	camera.look_at(Vector3(0, 0.3, 0), Vector3.UP)
-	camera.fov = 65
+	# Broadcast-style framing: high and pulled back, narrow FOV so the court
+	# reads flat and produced rather than fisheye, both characters in frame.
+	camera.position = Vector3(0, 3.4, -5.0)
+	camera.look_at(Vector3(0, 0.2, 0.5), Vector3.UP)
+	camera.fov = 50
 
 	# Initialize game feel and capture the (new) camera position as our base.
 	game_feel.setup(camera, hud)
@@ -361,7 +363,8 @@ func _player_swing_with_shot(shot_type: int) -> void:
 	# (audio, vfx) that still expect that signal shape.
 	var emit_power: float = 1.0 - clampf(quality_scale / 0.45, 0.0, 1.0) * 0.5
 	EventBus.ball_hit.emit(0, shot_type, emit_power)
-	_announce_shot(shot_type)
+	# (No _announce_shot here — the PERFECT/GOOD/OK quality flash is the
+	# feedback. Two messages in one frame fight and read as flicker.)
 	match_manager.record_hit()
 	_animate_paddle_swing(player)
 
@@ -644,6 +647,17 @@ func _tint_character(character: Node3D, color: Color) -> void:
 		mat.albedo_color = color
 		mat.roughness = 0.5
 		body.material_override = mat
+	# Rigged model: soft pastel team tint over the whole (untextured white)
+	# body. Featureless white mannequins are unreadable — you can't tell
+	# front from back or whose side anyone is on.
+	var visual: Node = character.get_node_or_null("Visual")
+	if visual != null:
+		var pastel: Color = color.lerp(Color.WHITE, 0.55)
+		var rig_mat: StandardMaterial3D = StandardMaterial3D.new()
+		rig_mat.albedo_color = pastel
+		rig_mat.roughness = 0.7
+		for mesh_node: Node in visual.find_children("*", "MeshInstance3D", true, false):
+			(mesh_node as MeshInstance3D).material_override = rig_mat
 	# Team ring on the floor under the character — works for both the rigged
 	# model (which we don't want to paint blue/orange) and the placeholder.
 	if character.get_node_or_null("TeamRing") != null:
@@ -786,12 +800,12 @@ func _update_camera() -> void:
 	# the human's own (blue) character is in the foreground. dest_z stays
 	# negative; we still nudge it slightly with the ball so the framing
 	# pulls back when the ball is deep on the opponent's side.
-	var follow: float = ball.position.z * 0.08
-	var dest_z: float = (-4.6 if is_doubles else -4.2) - follow
+	var follow: float = ball.position.z * 0.06
+	var dest_z: float = (-5.4 if is_doubles else -5.0) - follow
 	camera_base_pos.z = move_toward(camera_base_pos.z, dest_z, 0.05)
 	camera.position = camera_base_pos + game_feel.current_shake_offset
 	# Re-aim each frame so the basis stays consistent as we follow the ball.
-	camera.look_at(Vector3(0, 0.3, 0), Vector3.UP)
+	camera.look_at(Vector3(0, 0.2, 0.5), Vector3.UP)
 
 # === POWER METER ===
 

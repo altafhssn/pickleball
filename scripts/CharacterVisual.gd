@@ -29,8 +29,10 @@ const LOOPED_ANIMS := ["idle", "run_forward", "run_backward", "run_left", "run_r
 # Desired character height in world units. The court is ~half real-world
 # scale (3.0 wide vs 6.1 m real), so a 1.8 m human ≈ 0.9 units.
 @export var target_height: float = 0.9
-# If the rig faces the wrong way after import, tune this (radians).
-@export var model_yaw_offset: float = PI
+# Mixamo rigs face +Z as authored, which is already "toward the net" for a
+# root with yaw 0 in our convention — no offset needed. Flip to PI if a
+# different rig faces backwards.
+@export var model_yaw_offset: float = 0.0
 
 var anim_player: AnimationPlayer = null
 var model: Node3D = null
@@ -183,10 +185,31 @@ func _collect_animations() -> void:
 		_remap_tracks_to_skeleton(anim, skel_path)
 		if clean_name in LOOPED_ANIMS:
 			anim.loop_mode = Animation.LOOP_LINEAR
+		else:
+			# One-shots (smash/victory/defeat): Mixamo bakes root motion into
+			# the hips. The lunge slides the character away from its gameplay
+			# position, then the blend back to idle snaps it home — reads as
+			# a flicker. Keep vertical hip motion (the squat), pin X/Z.
+			_strip_horizontal_root_motion(anim)
 		if lib.has_animation(clean_name):
 			lib.remove_animation(clean_name)
 		lib.add_animation(clean_name, anim)
 	print("CharacterVisual: animations ready → ", anim_player.get_animation_list())
+
+func _strip_horizontal_root_motion(anim: Animation) -> void:
+	for i: int in anim.get_track_count():
+		if anim.track_get_type(i) != Animation.TYPE_POSITION_3D:
+			continue
+		var bone: String = anim.track_get_path(i).get_concatenated_subnames().to_lower()
+		if not bone.contains("hips"):
+			continue
+		var key_count: int = anim.track_get_key_count(i)
+		if key_count == 0:
+			continue
+		var first: Vector3 = anim.track_get_key_value(i, 0)
+		for k: int in key_count:
+			var v: Vector3 = anim.track_get_key_value(i, k)
+			anim.track_set_key_value(i, k, Vector3(first.x, v.y, first.z))
 
 func _remap_tracks_to_skeleton(anim: Animation, skel_path: String) -> void:
 	# Bone tracks are "path/to/Skeleton3D:bone_name". Keep the bone part,

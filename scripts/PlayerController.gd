@@ -18,8 +18,8 @@ const CELEBRATE_JUMP_HEIGHT: float = 0.15
 const CELEBRATE_JUMP_DURATION: float = 0.3
 
 # Look-at rotation speed
-const LOOK_AT_SPEED: float = 3.0
-const MAX_YAW: float = 0.5  # ~28 degrees each way
+const LOOK_AT_SPEED: float = 4.0
+const MAX_YAW: float = 0.9  # ~51 degrees each way — visibly tracks the ball
 
 @onready var body_mesh: MeshInstance3D = $Body
 @onready var paddle: MeshInstance3D = $Paddle
