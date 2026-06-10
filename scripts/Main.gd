@@ -69,20 +69,34 @@ var touch_move_dir: Vector2 = Vector2.ZERO
 # and rally share the Space key and we want both to edge-detect cleanly.
 var was_serve_space_pressed: bool = false
 var was_rally_space_pressed: bool = false
-# AI auto-swing — fires after a brief reaction window once the ball is in
-# range of the AI character.
+# === COMMIT-AND-CONTACT SWING SYSTEM ===
+# The player commits to a shot type ANY time while the ball approaches.
+# The character auto-runs to the intercept; when the ball gets close the
+# swing animation starts, and CONTACT_DELAY later the bat "meets" the ball
+# and it launches toward the aim. Earlier commit = tighter placement.
+var pending_shot: int = -1          # committed ShotType, -1 = none
+var commit_time_ms: int = 0         # when the player committed (msec ticks)
+var swing_contact_timer: float = 0.0  # counts down from swing start to contact
+var swing_in_progress: bool = false
+var player_swung_this_approach: bool = false  # one swing per incoming ball
+
+const SWING_TRIGGER_RANGE: float = 1.5  # start the swing when ball is this close
+const CONTACT_DELAY: float = 0.32       # swing start → bat-meets-ball moment
+const CONTACT_REACH: float = 2.2        # max distance at contact for a connect
+
+# AI mirror of the same system: windup anim first, launch at contact.
 var ai_ready_to_swing: bool = false
 var ai_swing_timer: float = 0.0
+var ai_contact_timer: float = 0.0
+var ai_winding_up: bool = false
 # Flag set when AI just swung; cleared when the ball crosses back to the
 # player's side. Prevents the AI from re-hitting its own outgoing ball.
 var ai_just_swung: bool = false
-const AI_REACTION_TIME: float = 0.35
-# Tighter than the player's range — the AI has to actually be near the ball
+const AI_REACTION_TIME: float = 0.25
+# Tighter than the player's reach — the AI has to actually be near the ball
 # to connect, so well-placed shots into the corners win the rally outright.
 const AI_HIT_RANGE: float = 1.20
-# How close the ball needs to be to the player character for a Space press
-# to count as a connected swing. Generous on purpose.
-const PLAYER_HIT_RANGE: float = 2.1
+const AI_CONTACT_REACH: float = 1.45
 
 # Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
 var camera_base_pos: Vector3 = Vector3.ZERO
@@ -295,117 +309,166 @@ func _process_serve_input(_delta: float) -> void:
 	was_serve_space_pressed = space_now
 
 func _process_rally_input() -> void:
-	# Wii-Sports rally swing: one tap of Space hits the ball when it's on
-	# the player's side. Whether the swing connects depends only on whether
-	# the ball is in PLAYER_HIT_RANGE of the character.
+	# Space = commit a DRIVE. Commit is allowed any time the ball is heading
+	# our way — even while it's still on the AI's side. Earlier = better.
 	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
-	if rally_active and ball.is_in_play and ball.position.z < 0 and not game_state.can_serve():
+	if not game_state.can_serve():
 		if space_now and not was_rally_space_pressed:
-			_player_swing()
+			_commit_shot(BallRef.ShotType.DRIVE)
 	was_rally_space_pressed = space_now
 
-# Wii-Sports player swing: forgiving — if the ball is anywhere within
-# PLAYER_HIT_RANGE of the character, the swing connects and the ball flies
-# back toward the opponent's court. Timing quality (distance at impact)
-# controls power: closer = PERFECT, further = OK.
-func _player_swing() -> void:
-	_player_swing_with_shot(BallRef.ShotType.DRIVE)
+# === COMMIT-AND-CONTACT (player) ===
 
-# Single entry point — used by keyboard Space and by the LOB/DRIVE/DINK
-# touch buttons. Computes the timing quality, shows feedback, applies a
-# power proportional to that quality.
-func _player_swing_with_shot(shot_type: int) -> void:
+# Record the player's shot choice. The actual contact happens later, timed
+# to the swing animation, in _process_commit_swing. Pressing again before
+# the swing starts switches the pending shot (e.g. DRIVE → LOB).
+func _commit_shot(shot_type: int) -> void:
 	if not (rally_active and ball.is_in_play):
 		return
-	# Ball must be solidly on the player's side, not still passing over the
-	# net. The 0.1 margin treats anything within 10 cm of the net as "not
-	# yet on your side" — prevents the 'I swung but the ball was on the
-	# other court' feeling.
+	if player_swung_this_approach or swing_in_progress:
+		return
+	if ball.last_hitter_id == 0:
+		return  # we hit it last; it's the AI's ball
+	var first_commit: bool = pending_shot == -1
+	pending_shot = shot_type
+	if first_commit:
+		commit_time_ms = Time.get_ticks_msec()
+	var shot_name: String = "DRIVE"
+	match shot_type:
+		BallRef.ShotType.LOB: shot_name = "LOB"
+		BallRef.ShotType.DINK: shot_name = "DINK"
+	hud.show_message(shot_name + " locked ✓", Color(0.75, 0.9, 1.0))
+
+# Runs every frame: starts the swing when the inbound ball gets close, then
+# launches the ball at the animation's contact moment.
+func _process_commit_swing(delta: float) -> void:
+	# Reset for the next approach once the ball is heading away again.
+	if not (rally_active and ball.is_in_play) or ball.last_hitter_id == 0:
+		pending_shot = -1
+		swing_in_progress = false
+		swing_contact_timer = 0.0
+		player_swung_this_approach = false
+		return
+
+	# Mid-swing: count down to the bat-meets-ball moment.
+	if swing_in_progress:
+		swing_contact_timer -= delta
+		if swing_contact_timer <= 0.0:
+			swing_in_progress = false
+			_launch_committed_shot()
+		return
+
+	if pending_shot == -1 or player_swung_this_approach:
+		return
+	# Trigger conditions: ball solidly on our side, required bounce done,
+	# within swing-trigger range of the character.
 	if ball.position.z > -0.1:
 		return
-	if ball.linear_velocity.z > 0.5:
-		return  # ball flying away, can't be hit
+	if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
+		return  # two-bounce rule: wait for it to land first
 	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
-	if dist > PLAYER_HIT_RANGE:
-		hud.show_message("Whiff!", Color(1, 0.4, 0.4))
+	if dist <= SWING_TRIGGER_RANGE:
+		swing_in_progress = true
+		player_swung_this_approach = true
+		swing_contact_timer = CONTACT_DELAY
+		_animate_paddle_swing(player)
+
+func _launch_committed_shot() -> void:
+	var shot_type: int = pending_shot
+	pending_shot = -1
+	if not (rally_active and ball.is_in_play):
 		return
-	# Tier feedback only — quality affects target precision, not arc.
-	var quality_scale: float
-	if dist < PERFECT_DIST:
+	# Generous reach at contact — the trigger already required proximity.
+	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
+	if dist > CONTACT_REACH or ball.position.z > -0.05:
+		hud.show_message("Missed!", Color(1, 0.4, 0.4))
+		return
+	# Quality from commit earliness: deciding early = a composed shot.
+	var early_sec: float = float(Time.get_ticks_msec() - commit_time_ms) / 1000.0
+	var spread: float
+	if early_sec >= 0.9:
 		hud.show_message("✦ PERFECT! ✦", Color(0.2, 1.0, 0.4))
-		quality_scale = 0.10  # tight aim
-	elif dist < GOOD_DIST:
+		spread = 0.10
+	elif early_sec >= 0.45:
 		hud.show_message("GOOD!", Color(1.0, 0.95, 0.2))
-		quality_scale = 0.25
+		spread = 0.25
 	else:
 		hud.show_message("OK", Color(1.0, 0.6, 0.2))
-		quality_scale = 0.45  # sprayed aim
-	# Shot type determines trajectory (flight time) and target depth.
-	# LOB high & deep; DINK low & short; DRIVE low & mid.
-	var target_x: float = clampf(-ball.position.x * 0.7 + randf_range(-quality_scale, quality_scale), -1.2, 1.2)
+		spread = 0.45
+	# Smart aim: place away from where the opponent is standing.
+	var away_x: float = clampf(-opponent.position.x * 1.2, -1.1, 1.1)
+	var target_x: float = clampf(away_x + randf_range(-spread, spread), -1.2, 1.2)
 	var target_z: float
 	var flight_time: float
 	match shot_type:
 		BallRef.ShotType.LOB:
-			target_z = OPPONENT_BASELINE - randf_range(0.3, 0.55)   # safer depth
+			target_z = OPPONENT_BASELINE - randf_range(0.3, 0.55)
 			flight_time = 1.10
 		BallRef.ShotType.DINK:
 			target_z = randf_range(0.4, 0.85)
 			flight_time = 0.90
 		_:
-			target_z = OPPONENT_BASELINE - randf_range(0.6, 1.0)   # comfortably in-court
+			target_z = OPPONENT_BASELINE - randf_range(0.6, 1.0)
 			flight_time = 0.70
-	var target := Vector3(target_x, 0, target_z)
-	ball.launch_at_target(ball.position, target, flight_time)
+	ball.launch_at_target(ball.position, Vector3(target_x, 0, target_z), flight_time)
 	ball.last_hitter_id = 0
 	last_player_shot_type = shot_type
-	# Convert the timing tier back to a 0-1 "power" for downstream listeners
-	# (audio, vfx) that still expect that signal shape.
-	var emit_power: float = 1.0 - clampf(quality_scale / 0.45, 0.0, 1.0) * 0.5
+	var emit_power: float = 1.0 - clampf(spread / 0.45, 0.0, 1.0) * 0.5
 	EventBus.ball_hit.emit(0, shot_type, emit_power)
-	# (No _announce_shot here — the PERFECT/GOOD/OK quality flash is the
-	# feedback. Two messages in one frame fight and read as flicker.)
 	match_manager.record_hit()
-	_animate_paddle_swing(player)
 
-# Wii-Sports AI auto-swing: once the ball is on the AI's side and within
-# AI_HIT_RANGE of the AI character, fire a swing after a short reaction
-# window. No decision tree, no shot types — just send the ball back.
+# === COMMIT-AND-CONTACT (AI mirror) ===
+# Two-phase like the player: reaction → windup (swing anim plays) →
+# contact (ball launches), so the bat visually meets the ball.
 func _process_ai_swing(delta: float) -> void:
 	# When the ball is back on the player's side, reset everything.
 	if ball.position.z < 0:
 		ai_ready_to_swing = false
 		ai_swing_timer = 0.0
+		ai_winding_up = false
+		ai_contact_timer = 0.0
 		ai_just_swung = false
 		return
 	if not (rally_active and ball.is_in_play):
 		ai_ready_to_swing = false
 		ai_swing_timer = 0.0
+		ai_winding_up = false
 		return
 	# Don't re-hit a ball we just sent away.
 	if ai_just_swung:
 		return
-	if total_bounces_in_rally < 1:
-		return  # wait for the serve to bounce first
+	# Two-bounce rule, same gate as the player: until both the serve and
+	# the return have bounced, every hit must follow a bounce.
+	if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
+		return
+
+	# Windup phase: swing anim already playing; launch at the contact moment.
+	if ai_winding_up:
+		ai_contact_timer -= delta
+		if ai_contact_timer <= 0.0:
+			ai_winding_up = false
+			var dist_now: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
+			if dist_now <= AI_CONTACT_REACH:
+				ai_just_swung = true
+				_ai_launch()
+		return
+
+	# Reaction phase: ball entered range → wait the reaction time, then
+	# start the windup early enough that contact lands when the ball is in.
 	if ai_ready_to_swing:
 		ai_swing_timer -= delta
 		if ai_swing_timer <= 0.0:
 			ai_ready_to_swing = false
-			# Re-check distance at swing time — if the ball moved out of
-			# range during the reaction window, AI whiffs (no hit, last
-			# hitter unchanged, so the eventual fault goes to the right
-			# side).
-			var dist_now: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
-			if dist_now <= AI_HIT_RANGE:
-				ai_just_swung = true
-				_ai_swing()
+			ai_winding_up = true
+			ai_contact_timer = CONTACT_DELAY
+			_animate_paddle_swing(opponent)
 		return
 	var dist: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
-	if dist <= AI_HIT_RANGE:
+	if dist <= AI_HIT_RANGE + 0.4:
 		ai_ready_to_swing = true
 		ai_swing_timer = AI_REACTION_TIME
 
-func _ai_swing() -> void:
+func _ai_launch() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
 	var target_x: float = clampf(-ball.position.x * 0.5 + randf_range(-0.45, 0.45), -1.2, 1.2)
@@ -416,7 +479,6 @@ func _ai_swing() -> void:
 	ball.last_hitter_id = 1
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.75)
 	match_manager.record_hit()
-	_animate_paddle_swing(opponent)
 
 func _launch_player_serve(power: float) -> void:
 	if not player_serve_ready:
@@ -429,6 +491,7 @@ func _launch_player_serve(power: float) -> void:
 	var target := Vector3(randf_range(-0.5, 0.5), 0, 1.1)
 	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
+	_animate_paddle_swing(player)
 
 	EventBus.ball_served.emit(ball.position, target)
 	EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, power)
@@ -530,8 +593,8 @@ func _on_touch_dink() -> void:
 	_touch_hit(BallRef.ShotType.DINK)
 
 func _touch_hit(shot_type: int) -> void:
-	# Touch buttons share the keyboard swing's quality-based pipeline.
-	_player_swing_with_shot(shot_type)
+	# Touch buttons commit a shot; contact is timed to the swing animation.
+	_commit_shot(shot_type)
 
 func _on_touch_move(direction: Vector2) -> void:
 	touch_move_dir = direction
@@ -558,30 +621,20 @@ func _spawn_swing_zone_ring() -> void:
 func _update_swing_zone_ring() -> void:
 	if swing_zone_ring == null:
 		return
-	# Only show when the ball is approaching the player on their side.
-	if not (rally_active and ball.is_in_play) \
-		or ball.position.z >= 0 \
-		or ball.linear_velocity.z > 0.5:
+	# Commit-state indicator: show while the ball is ours to play.
+	#   pulsing white — ball inbound, no shot locked yet (press something!)
+	#   green        — shot locked, character will swing automatically
+	if not (rally_active and ball.is_in_play) or ball.last_hitter_id == 0:
 		swing_zone_ring.visible = false
 		return
 	swing_zone_ring.visible = true
 	swing_zone_ring.global_position = Vector3(player.position.x, 0.015, player.position.z)
-
-	# Two-bounce wait: ring is grey/dim, "don't hit yet" cue.
-	var awaiting_bounce: bool = total_bounces_in_rally < 2 and bounces_since_last_hit < 1
 	var color: Color
-	if awaiting_bounce:
-		color = Color(0.45, 0.45, 0.5, 0.55)   # grey: not yet hittable
+	if pending_shot == -1 and not player_swung_this_approach:
+		var pulse: float = 0.6 + 0.4 * sin(Time.get_ticks_msec() / 180.0)
+		color = Color(1.0, 1.0, 1.0, pulse)
 	else:
-		var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
-		if dist < PERFECT_DIST:
-			color = Color(0.15, 1.0, 0.35, 1.0)     # green
-		elif dist < GOOD_DIST:
-			color = Color(1.0, 0.95, 0.2, 0.95)     # yellow
-		elif dist < PLAYER_HIT_RANGE:
-			color = Color(1.0, 0.55, 0.15, 0.9)     # orange
-		else:
-			color = Color(1.0, 0.25, 0.25, 0.7)     # red
+		color = Color(0.15, 1.0, 0.35, 1.0)
 	var mat: StandardMaterial3D = swing_zone_ring.material_override as StandardMaterial3D
 	mat.albedo_color = color
 	mat.emission = Color(color.r, color.g, color.b)
@@ -720,6 +773,7 @@ func _process(delta: float) -> void:
 	_update_swing_zone_ring()
 	_process_serve_input(delta)
 	_process_rally_input()
+	_process_commit_swing(delta)
 	_process_ai_swing(delta)
 	_check_ball_stuck(delta)
 
@@ -962,6 +1016,7 @@ func _ai_serve() -> void:
 	var target = Vector3(randf_range(-0.5, 0.5), 0, PLAYER_BASELINE + 0.45)
 	ball.serve(ball.position, target, 0.55)
 	ball.last_hitter_id = 1
+	_animate_paddle_swing(opponent)
 	EventBus.ball_served.emit(ball.position, target)
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.6)
 	
@@ -988,24 +1043,21 @@ func _doubles_ai_serve(server_pos: int) -> void:
 # === PLAYER INPUT ===
 
 func _on_swipe_detected(velocity: Vector2, _distance: float) -> void:
-	# If charging, release power shot first
-	if is_charging:
-		release_power_shot()
-		return
-	
 	if not game_state.can_serve() and not rally_active:
 		return
-	
+
 	var dir_name = input_handler.get_swipe_direction_name(velocity)
-	
+
 	if game_state.can_serve() and is_player_serving:
 		if is_doubles:
 			_handle_doubles_player_serve(dir_name, velocity)
 		else:
 			_handle_player_serve(dir_name, velocity)
 		return
-	
-	if rally_active and ball.position.z < 0 and ball.is_in_play:
+
+	# Rally: swipes commit a shot (direction picks the type); commit is
+	# allowed any time the ball is inbound, even before it crosses the net.
+	if rally_active and ball.is_in_play:
 		_handle_player_shot(dir_name, velocity)
 
 func _handle_player_serve(swipe_dir: String, velocity: Vector2) -> void:
@@ -1065,47 +1117,20 @@ func _handle_player_shot(swipe_dir: String, _velocity: Vector2) -> void:
 			shot_type = BallRef.ShotType.DINK
 		_:
 			shot_type = BallRef.ShotType.DRIVE
-	_player_swing_with_shot(shot_type)
+	_commit_shot(shot_type)
 
 func _on_tap_detected(_position: Vector2) -> void:
-	# If charging, release power shot
-	if is_charging:
-		release_power_shot()
-		return
-	
-	# Tap = volley if ball on player side and in air
-	if rally_active and ball.position.z < 0 and ball.position.y > 0.1 and ball.is_in_play:
-		if _is_two_bounce_violation():
-			hud.show_message("Wait for the bounce!")
-			return
-		var power = 0.7
-		var direction = Vector3(0, -0.1, 1.0).normalized()
-
-		if match_manager.check_kitchen_violation(player.position, true):
-			hud.show_message("No volleying from the kitchen!")
-			return
-		
-		ball.hit(power, direction, BallRef.ShotType.VOLLEY)
-		ball.last_hitter_id = 0
-		last_player_shot_type = BallRef.ShotType.VOLLEY
-		EventBus.ball_hit.emit(0, BallRef.ShotType.VOLLEY, power)
-		_announce_shot(BallRef.ShotType.VOLLEY)
-		match_manager.record_hit()
+	# Tap = commit a DRIVE (same as Space).
+	_commit_shot(BallRef.ShotType.DRIVE)
 
 func _on_double_tap(_position: Vector2) -> void:
-	# Double tap starts power charge
-	start_power_charge()
+	# Double tap = commit a LOB.
+	_commit_shot(BallRef.ShotType.LOB)
 
-func _on_drag(from: Vector2, to: Vector2) -> void:
-	if rally_active and ball.position.z < 0 and ball.is_in_play:
-		var drag_vector = to - from
-		var power = clampf(drag_vector.length() / 500.0, 0.3, 0.9)
-		var target_x = clampf((to.x - 540) / 540.0, -0.5, 0.5)
-		var direction = Vector3(target_x, 0.3, 0.9).normalized()
-		ball.hit(power, direction, BallRef.ShotType.DRIVE)
-		ball.last_hitter_id = 0
-		EventBus.ball_hit.emit(0, BallRef.ShotType.DRIVE, power)
-		match_manager.record_hit()
+func _on_drag(_from: Vector2, _to: Vector2) -> void:
+	# Drags route through _on_swipe_detected → _handle_player_shot, which
+	# commits by direction. Nothing extra here.
+	pass
 
 # === AI SHOT ===
 
@@ -1235,13 +1260,13 @@ func _end_rally_out_of_bounds() -> void:
 func _update_turn_indicator() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
-	if ball.position.z < 0:
-		# Two-bounce phase: the ball has crossed to player's side after
-		# the AI's serve but hasn't bounced yet. Tell the user to wait.
-		if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
-			hud.show_serve_indicator("Wait for the bounce…")
+	# Commit-early model: prompt the moment the ball is ours to play
+	# (AI hit it last), clear once a shot is locked or it's not our ball.
+	if ball.last_hitter_id != 0 and not player_swung_this_approach:
+		if pending_shot == -1:
+			hud.show_serve_indicator("Pick your shot!")
 		else:
-			hud.show_serve_indicator("SPACE to swing!")
+			hud.show_serve_indicator("")
 	else:
 		hud.show_serve_indicator("")
 
@@ -1461,7 +1486,13 @@ func _reset_rally() -> void:
 	total_bounces_in_rally = 0
 	ai_ready_to_swing = false
 	ai_swing_timer = 0.0
+	ai_winding_up = false
+	ai_contact_timer = 0.0
 	ai_just_swung = false
+	pending_shot = -1
+	swing_in_progress = false
+	swing_contact_timer = 0.0
+	player_swung_this_approach = false
 	was_serve_space_pressed = false
 	was_rally_space_pressed = false
 	match_manager.reset_rally()

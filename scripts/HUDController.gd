@@ -46,7 +46,7 @@ func show_serve_indicator(text: String) -> void:
 
 func show_gesture_guide(visible_flag: bool) -> void:
 	if visible_flag:
-		gesture_guide.text = "Press SPACE to serve · Press SPACE to swing\n(your character runs to the ball automatically)"
+		gesture_guide.text = "Pick your shot EARLY while the ball comes to you — earlier = better!\nSPACE/tap = Drive · W/double-tap = Lob · S = Dink"
 		guide_timer = 10.0
 	else:
 		gesture_guide.text = ""
