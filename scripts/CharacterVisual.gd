@@ -236,34 +236,92 @@ func _extract_animation(path: String) -> Animation:
 	return result
 
 func _attach_paddle() -> void:
-	var paddle_scene: PackedScene = load(PADDLE_PATH)
-	if paddle_scene == null:
-		return
 	var bone_idx: int = _find_hand_bone()
 	if bone_idx < 0:
+		push_warning("CharacterVisual: no hand bone found. Bones: %s" % ", ".join(_all_bone_names()))
 		return
+	print("CharacterVisual: paddle bone = ", skeleton.get_bone_name(bone_idx))
 	var attachment: BoneAttachment3D = BoneAttachment3D.new()
 	attachment.bone_name = skeleton.get_bone_name(bone_idx)
 	skeleton.add_child(attachment)
-	var paddle: Node3D = paddle_scene.instantiate()
-	attachment.add_child(paddle)
-	# Auto-scale the paddle in WORLD space so a unit mismatch between the
-	# paddle FBX and the rig (cm vs m) can't produce a court-sized paddle.
-	# Real paddle ≈ 0.4 m vs 1.8 m human → ~22% of character height.
-	var paddle_aabb: AABB = _combined_aabb(paddle)
-	var longest: float = maxf(paddle_aabb.size.x, maxf(paddle_aabb.size.y, paddle_aabb.size.z))
-	print("CharacterVisual: raw paddle longest axis (world) = %.3f" % longest)
-	if longest > 0.001:
-		var desired: float = 0.22 * target_height
-		var ps: float = clampf(desired / longest, 0.0001, 100.0)
-		paddle.scale = paddle.scale * ps
-		print("CharacterVisual: applied paddle scale = %.4f" % ps)
+
+	var paddle: Node3D = null
+	var paddle_scene: PackedScene = load(PADDLE_PATH)
+	if paddle_scene != null:
+		paddle = paddle_scene.instantiate()
+		attachment.add_child(paddle)
+		# Auto-scale in WORLD space so a unit mismatch between the paddle FBX
+		# and the rig (cm vs m) can't produce a court-sized or invisible
+		# paddle. Real paddle ≈ 0.4 m vs 1.8 m human → ~22% of height.
+		var paddle_aabb: AABB = _combined_aabb(paddle)
+		var longest: float = maxf(paddle_aabb.size.x, maxf(paddle_aabb.size.y, paddle_aabb.size.z))
+		print("CharacterVisual: raw paddle longest axis (world) = %.4f" % longest)
+		if longest > 0.0001:
+			var desired: float = 0.22 * target_height
+			var ps: float = clampf(desired / longest, 0.0001, 1000.0)
+			paddle.scale = paddle.scale * ps
+			print("CharacterVisual: applied paddle scale = %.4f" % ps)
+		else:
+			# Degenerate import — drop it and use the fallback below.
+			paddle.queue_free()
+			paddle = null
+	if paddle == null:
+		# Guaranteed-visible fallback: a simple primitive paddle so the
+		# character is never empty-handed even if the FBX fails.
+		paddle = _build_primitive_paddle()
+		attachment.add_child(paddle)
+		print("CharacterVisual: using primitive fallback paddle")
+
+func _build_primitive_paddle() -> Node3D:
+	var root := Node3D.new()
+	root.name = "FallbackPaddle"
+	# Sizes are authored in world units, then counter-scaled because the
+	# attachment inherits the model's scale through the skeleton.
+	var inv: float = 1.0
+	if model and model.scale.x > 0.0001:
+		inv = 1.0 / model.scale.x
+	root.scale = Vector3(inv, inv, inv)
+
+	var face := MeshInstance3D.new()
+	var face_mesh := BoxMesh.new()
+	face_mesh.size = Vector3(0.10, 0.13, 0.02)
+	face.mesh = face_mesh
+	face.position = Vector3(0, 0.13, 0)
+	var handle := MeshInstance3D.new()
+	var handle_mesh := CylinderMesh.new()
+	handle_mesh.top_radius = 0.012
+	handle_mesh.bottom_radius = 0.012
+	handle_mesh.height = 0.09
+	handle.mesh = handle_mesh
+	handle.position = Vector3(0, 0.045, 0)
+	root.add_child(face)
+	root.add_child(handle)
+	return root
 
 func _find_hand_bone() -> int:
-	# Mixamo: "mixamorig:RightHand" → Godot import renames to
-	# "mixamorig_RightHand". Match loosely on "righthand".
+	# Try hard to find a right hand across naming conventions:
+	# mixamorig_RightHand, Hand.R, hand_r, R_Hand, RightHand, etc.
+	var hand_bones: Array[int] = []
 	for i: int in skeleton.get_bone_count():
-		var bone: String = skeleton.get_bone_name(i).to_lower().replace("_", "").replace(":", "")
-		if bone.ends_with("righthand"):
+		var raw: String = skeleton.get_bone_name(i).to_lower()
+		var norm: String = ""
+		for ch in raw:
+			if ch >= "a" and ch <= "z":
+				norm += ch
+		if norm.contains("hand") and not norm.contains("thumb") \
+			and not norm.contains("index") and not norm.contains("middle") \
+			and not norm.contains("ring") and not norm.contains("pinky"):
+			hand_bones.append(i)
+	# Prefer an explicit right hand.
+	for i: int in hand_bones:
+		var raw: String = skeleton.get_bone_name(i).to_lower()
+		if raw.contains("right") or raw.ends_with(".r") or raw.ends_with("_r") or raw.begins_with("r_"):
 			return i
-	return -1
+	# Otherwise take any hand.
+	return hand_bones[0] if hand_bones.size() > 0 else -1
+
+func _all_bone_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	for i: int in skeleton.get_bone_count():
+		names.append(skeleton.get_bone_name(i))
+	return names
