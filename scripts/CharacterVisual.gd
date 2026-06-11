@@ -66,6 +66,13 @@ func setup() -> bool:
 	_collect_animations()
 	_attach_paddle()
 
+	# Skinned meshes are frustum-culled by their REST-POSE AABB. Animations
+	# that move the skeleton outside that box (smash lunges, runs) make the
+	# renderer think the mesh is off-screen and stop drawing it — the
+	# character literally vanishes mid-swing. A generous cull margin fixes it.
+	for mesh_node: Node in find_children("*", "MeshInstance3D", true, false):
+		(mesh_node as MeshInstance3D).extra_cull_margin = 4.0
+
 	anim_player.playback_default_blend_time = 0.15
 	anim_player.animation_finished.connect(_on_animation_finished)
 	is_ready = true
