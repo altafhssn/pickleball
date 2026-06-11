@@ -215,11 +215,22 @@ func _collect_animations() -> void:
 	print("CharacterVisual: animations ready → ", anim_player.get_animation_list())
 
 func _strip_horizontal_root_motion(anim: Animation) -> void:
+	# Pin X/Z (keep the vertical squat) on every root-ish position track.
+	# "Root-ish" = the skeleton's actual parentless bone(s) — found by
+	# structure, not name — plus common root-bone names as a safety net.
+	# (This rig is NOT Mixamo-named: its hand bone is plain "RightHand",
+	# so a "hips"-only name filter missed its root entirely.)
+	var root_bones: Array[String] = []
+	for b: int in skeleton.get_bone_count():
+		if skeleton.get_bone_parent(b) == -1:
+			root_bones.append(skeleton.get_bone_name(b).to_lower())
 	for i: int in anim.get_track_count():
 		if anim.track_get_type(i) != Animation.TYPE_POSITION_3D:
 			continue
 		var bone: String = anim.track_get_path(i).get_concatenated_subnames().to_lower()
-		if not bone.contains("hips"):
+		var rootish: bool = bone in root_bones or bone.contains("hip") \
+			or bone.contains("pelvis") or bone.contains("root")
+		if not rootish:
 			continue
 		var key_count: int = anim.track_get_key_count(i)
 		if key_count == 0:
@@ -232,10 +243,15 @@ func _strip_horizontal_root_motion(anim: Animation) -> void:
 func _remap_tracks_to_skeleton(anim: Animation, skel_path: String) -> void:
 	# Bone tracks are "path/to/Skeleton3D:bone_name". Keep the bone part,
 	# replace the node part with our skeleton's path.
-	for i: int in anim.get_track_count():
+	# Tracks WITHOUT a bone subname target a plain node (the armature /
+	# scene root inside the FBX) — they are pure root-motion carriers that
+	# drag the whole model away from its gameplay position. Delete them.
+	for i: int in range(anim.get_track_count() - 1, -1, -1):
 		var old_path: NodePath = anim.track_get_path(i)
 		var bone: String = old_path.get_concatenated_subnames()
-		if bone != "":
+		if bone == "":
+			anim.remove_track(i)
+		else:
 			anim.track_set_path(i, NodePath(skel_path + ":" + bone))
 
 func _extract_animation(path: String) -> Animation:
