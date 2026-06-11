@@ -202,6 +202,7 @@ func _collect_animations() -> void:
 			push_warning("CharacterVisual: no animation in %s" % ANIM_SOURCES[clean_name])
 			continue
 		_remap_tracks_to_skeleton(anim, skel_path)
+		_normalize_position_scale(anim, clean_name)
 		if clean_name in LOOPED_ANIMS:
 			anim.loop_mode = Animation.LOOP_LINEAR
 		# ALL clips get horizontal root motion stripped (keep the vertical
@@ -213,6 +214,57 @@ func _collect_animations() -> void:
 			lib.remove_animation(clean_name)
 		lib.add_animation(clean_name, anim)
 	print("CharacterVisual: animations ready → ", anim_player.get_animation_list())
+
+# Animation-only FBX exports (no skin) can store bone positions at a
+# different unit scale than the skinned base rig (cm vs m). When such a
+# clip plays, every bone teleports ~100× away (or to ~1/100th) and the
+# mesh visually vanishes. Detect the mismatch by comparing the clip's
+# root-bone position against the base skeleton's rest pose and rescale
+# every position key to match.
+func _normalize_position_scale(anim: Animation, clip_name: String) -> void:
+	var root_idx: int = -1
+	for b: int in skeleton.get_bone_count():
+		if skeleton.get_bone_parent(b) == -1:
+			root_idx = b
+			break
+	if root_idx < 0:
+		return
+	# The root bone often sits at origin; use the first bone with a real
+	# rest offset (usually hips/pelvis under the root) as the yardstick.
+	var ref_bone: int = root_idx
+	var rest_len: float = skeleton.get_bone_rest(ref_bone).origin.length()
+	if rest_len < 0.001:
+		for b: int in skeleton.get_bone_count():
+			if skeleton.get_bone_parent(b) == ref_bone:
+				var l: float = skeleton.get_bone_rest(b).origin.length()
+				if l > 0.001:
+					ref_bone = b
+					rest_len = l
+					break
+	if rest_len < 0.001:
+		return
+	var ref_name: String = skeleton.get_bone_name(ref_bone)
+	# Find this bone's position track in the clip and compare magnitudes.
+	var ratio: float = 1.0
+	for i: int in anim.get_track_count():
+		if anim.track_get_type(i) != Animation.TYPE_POSITION_3D:
+			continue
+		if String(anim.track_get_path(i).get_concatenated_subnames()) != ref_name:
+			continue
+		if anim.track_get_key_count(i) == 0:
+			continue
+		var first: Vector3 = anim.track_get_key_value(i, 0)
+		if first.length() > 0.0001:
+			ratio = rest_len / first.length()
+		break
+	if absf(ratio - 1.0) < 0.1:
+		return  # scales already agree
+	print("CharacterVisual: '%s' position scale mismatch — rescaling keys ×%.4f" % [clip_name, ratio])
+	for i: int in anim.get_track_count():
+		if anim.track_get_type(i) != Animation.TYPE_POSITION_3D:
+			continue
+		for k: int in anim.track_get_key_count(i):
+			anim.track_set_key_value(i, k, anim.track_get_key_value(i, k) * ratio)
 
 func _strip_horizontal_root_motion(anim: Animation) -> void:
 	# Pin X/Z (keep the vertical squat) on every root-ish position track.
@@ -250,6 +302,11 @@ func _remap_tracks_to_skeleton(anim: Animation, skel_path: String) -> void:
 		var old_path: NodePath = anim.track_get_path(i)
 		var bone: String = old_path.get_concatenated_subnames()
 		if bone == "":
+			anim.remove_track(i)
+		elif anim.track_get_type(i) == Animation.TYPE_SCALE_3D:
+			# Foreign clips can carry bone-scale keys at a different unit
+			# convention than the base rig — a 0.01 scale key shrinks the
+			# mesh to invisibility. Humanoid clips don't need bone scaling.
 			anim.remove_track(i)
 		else:
 			anim.track_set_path(i, NodePath(skel_path + ":" + bone))

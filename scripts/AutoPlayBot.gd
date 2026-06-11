@@ -18,6 +18,13 @@ var commit_delay: float = -1.0   # countdown to commit; -1 = not scheduled
 var commit_style: int = 0        # rotates per rally: instant/medium/late/skip
 var match_done: bool = false
 
+# Visual capture (windowed runs only): saves viewport frames so the agent
+# can SEE rendering bugs. Enabled with `--capture` alongside `--autoplay`.
+var capture: bool = false
+var cap_idx: int = 0
+var last_cap: float = 0.0
+const CAPTURE_DIR := "C:/Users/altaf/OneDrive/Documents/PickleBall/captures"
+
 # Stats
 var hits_this_rally: int = 0
 var rally_lengths: Array = []
@@ -29,7 +36,10 @@ func _ready() -> void:
 	if not active:
 		set_process(false)
 		return
-	print("[BOT] autoplay active")
+	capture = "--capture" in OS.get_cmdline_user_args()
+	if capture:
+		DirAccess.make_dir_recursive_absolute(CAPTURE_DIR)
+	print("[BOT] autoplay active (capture=%s)" % capture)
 	EventBus.ball_hit.connect(_on_ball_hit)
 	EventBus.ball_bounced.connect(_on_bounce)
 
@@ -60,6 +70,23 @@ func _process(delta: float) -> void:
 		last_ball_report = t
 		print("[TRAJ] t=%.2f y=%.3f z=%.3f vy=%.2f vz=%.2f" % [
 			t, b.position.y, b.position.z, b.linear_velocity.y, b.linear_velocity.z])
+
+	# Viewport capture + character state log, for visual debugging.
+	if capture and started and t - last_cap > 0.4:
+		last_cap = t
+		cap_idx += 1
+		var img: Image = get_viewport().get_texture().get_image()
+		img.save_png("%s/cap_%03d.png" % [CAPTURE_DIR, cap_idx])
+		var p_anim: String = "?"
+		var o_anim: String = "?"
+		var p_model_pos: String = "?"
+		if main.player.get("visual") != null:
+			p_anim = main.player.visual.anim_player.current_animation
+			p_model_pos = str(main.player.visual.model.global_position)
+		if main.opponent.get("visual") != null:
+			o_anim = main.opponent.visual.anim_player.current_animation
+		print("[CAP] %03d t=%.1f p_anim=%s o_anim=%s p_node=%s p_model=%s" % [
+			cap_idx, t, p_anim, o_anim, str(main.player.global_position), p_model_pos])
 
 	# Serve when it's ours.
 	if main.game_state.can_serve() and main.is_player_serving and main.player_serve_ready:
