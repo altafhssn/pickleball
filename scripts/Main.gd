@@ -91,6 +91,10 @@ var ai_ready_to_swing: bool = false
 var ai_swing_timer: float = 0.0
 var ai_contact_timer: float = 0.0
 var ai_winding_up: bool = false
+# Where the AI stood when the player's shot launched — the distance from
+# here to its eventual contact point measures how badly the player's
+# placement stretched it. Stretched AI = weak return or error.
+var ai_pos_at_arm: Vector3 = Vector3.ZERO
 # Flag set when AI just swung; cleared when the ball crosses back to the
 # player's side. Prevents the AI from re-hitting its own outgoing ball.
 var ai_just_swung: bool = false
@@ -337,6 +341,23 @@ func _process_rally_input() -> void:
 	was_lob_key_pressed = lob_now
 	was_dink_key_pressed = dink_now
 
+	# Dev convenience: number keys 1-5 switch AI difficulty live so the
+	# challenge curve can be felt without UI.
+	var diffs := {
+		KEY_1: AIManagerRef.Difficulty.BEGINNER,
+		KEY_2: AIManagerRef.Difficulty.CASUAL,
+		KEY_3: AIManagerRef.Difficulty.PRO,
+		KEY_4: AIManagerRef.Difficulty.ELITE,
+		KEY_5: AIManagerRef.Difficulty.CHAMPION,
+	}
+	for key: int in diffs:
+		if Input.is_key_pressed(key):
+			var d: int = diffs[key]
+			if int(ai_manager.get("difficulty")) != d:
+				ai_manager.set_difficulty(d)
+				var names := ["Beginner", "Casual", "Pro", "Elite", "Champion"]
+				hud.show_message("AI: " + names[d], Color(0.8, 0.85, 1.0))
+
 # === COMMIT-AND-CONTACT (player) ===
 
 # Record the player's shot choice. The actual contact happens later, timed
@@ -411,15 +432,22 @@ func _launch_committed_shot() -> void:
 	# haphazard placement.
 	var early_sec: float = float(Time.get_ticks_msec() - commit_time_ms) / 1000.0
 	var spread: float
+	# pace scales the flight time: <1 = faster ball (a weapon), >1 = slow
+	# floaty ball the AI can step into. Quality has to matter or every
+	# rally feels like two bots trading neutral balls.
+	var pace: float
 	if dist <= PERFECT_DIST:
 		hud.show_message("CLEAN!", Color(0.2, 1.0, 0.4))
 		spread = 0.08
+		pace = 0.85
 	elif dist <= GOOD_DIST:
 		hud.show_message("GOOD!", Color(1.0, 0.95, 0.2))
 		spread = 0.18
+		pace = 1.0
 	else:
 		hud.show_message("REACH", Color(1.0, 0.6, 0.2))
 		spread = 0.34
+		pace = 1.2
 	if early_sec >= 0.55:
 		spread *= 0.75
 
@@ -439,6 +467,7 @@ func _launch_committed_shot() -> void:
 		_:
 			target_z = OPPONENT_BASELINE - randf_range(0.48, 0.82)
 			flight_time = 0.70
+	flight_time *= pace
 	ball.launch_at_target(ball.position, Vector3(target_x, 0, target_z), flight_time)
 	ball.last_hitter_id = 0
 	last_player_shot_type = shot_type
@@ -500,18 +529,109 @@ func _process_ai_swing(delta: float) -> void:
 	# ball's whole flight; the contact gate above waits for the bounce.
 	ai_ready_to_swing = true
 	ai_swing_timer = _get_inline_ai_reaction_time()
+	ai_pos_at_arm = opponent.position
 
 func _ai_launch() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
+	# How far did the player's placement pull the AI from where it stood?
+	var stretch: float = Vector2(ball.position.x - ai_pos_at_arm.x, ball.position.z - ai_pos_at_arm.z).length()
+
+	# Errors make the AI beatable: a base unforced-error rate by difficulty,
+	# plus a big bonus when the AI is stretched. An error sails out — the
+	# existing OOB rule awards the player the point.
+	var err_chance: float = _get_inline_ai_error_chance()
+	if stretch > 1.0:
+		err_chance += 0.30
+	elif stretch > 0.65:
+		err_chance += 0.15
+	if randf() < err_chance:
+		var out_x: float = randf_range(-1.4, 1.4)
+		var out_z: float = PLAYER_BASELINE - randf_range(0.75, 1.1)  # long past the baseline
+		ball.launch_at_target(ball.position, Vector3(out_x, 0, out_z), 0.70)
+		ball.last_hitter_id = 1
+		EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.85)
+		match_manager.record_hit()
+		return
+
+	# Stretched but no error → weak defensive sitter: slow, short, central.
+	# This is the player's reward for good placement: an easy ball to attack.
+	if stretch > 0.65:
+		var sit_x: float = randf_range(-0.35, 0.35)
+		var sit_z: float = randf_range(-1.05, -0.6)
+		ball.launch_at_target(ball.position, Vector3(sit_x, 0, sit_z), 1.25)
+		ball.last_hitter_id = 1
+		EventBus.ball_hit.emit(1, BallRef.ShotType.LOB, 0.4)
+		match_manager.record_hit()
+		return
+
+	# Comfortable return. Low difficulties feed the ball back at the player;
+	# high difficulties attack the player's open court.
+	var attack: float = _get_inline_ai_attack()
 	var spread: float = _get_inline_ai_spread()
-	var target_x: float = clampf(player.position.x + randf_range(-spread, spread), -1.05, 1.05)
+	var at_player_x: float = player.position.x
+	var open_x: float
+	if absf(player.position.x) < 0.15:
+		open_x = (1.0 if randf() > 0.5 else -1.0) * randf_range(0.6, 1.05)
+	else:
+		open_x = -signf(player.position.x) * randf_range(0.6, 1.05)
+	var target_x: float = clampf(lerpf(at_player_x, open_x, attack) + randf_range(-spread, spread), -1.05, 1.05)
 	var target_z: float = clampf(player.position.z + randf_range(0.35, 0.82), PLAYER_MIN_Z + 0.20, PLAYER_MAX_Z - 0.05)
 	var target := Vector3(target_x, 0, target_z)
 	ball.launch_at_target(ball.position, target, 0.90)
 	ball.last_hitter_id = 1
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.75)
 	match_manager.record_hit()
+
+func _get_inline_ai_error_chance() -> float:
+	var difficulty: int = int(ai_manager.get("difficulty"))
+	match difficulty:
+		AIManagerRef.Difficulty.BEGINNER:
+			return 0.22
+		AIManagerRef.Difficulty.CASUAL:
+			return 0.13
+		AIManagerRef.Difficulty.PRO:
+			return 0.07
+		AIManagerRef.Difficulty.ELITE:
+			return 0.04
+		AIManagerRef.Difficulty.CHAMPION:
+			return 0.02
+		_:
+			return 0.13
+
+# 0 = always aims at the player (friendly feed), 1 = always attacks the
+# player's open court.
+func _get_inline_ai_attack() -> float:
+	var difficulty: int = int(ai_manager.get("difficulty"))
+	match difficulty:
+		AIManagerRef.Difficulty.BEGINNER:
+			return 0.0
+		AIManagerRef.Difficulty.CASUAL:
+			return 0.3
+		AIManagerRef.Difficulty.PRO:
+			return 0.55
+		AIManagerRef.Difficulty.ELITE:
+			return 0.8
+		AIManagerRef.Difficulty.CHAMPION:
+			return 0.95
+		_:
+			return 0.3
+
+func _get_inline_ai_move_speed() -> float:
+	var difficulty: int = int(ai_manager.get("difficulty"))
+	match difficulty:
+		AIManagerRef.Difficulty.BEGINNER:
+			return 1.4
+		AIManagerRef.Difficulty.CASUAL:
+			return 1.7
+		AIManagerRef.Difficulty.PRO:
+			return 2.1
+		AIManagerRef.Difficulty.ELITE:
+			return 2.5
+		AIManagerRef.Difficulty.CHAMPION:
+			return 2.9
+		_:
+			return 1.7
 
 func _get_inline_ai_reaction_time() -> float:
 	var difficulty: int = int(ai_manager.get("difficulty"))
@@ -879,8 +999,9 @@ func _update_player_auto_move(delta: float) -> void:
 
 	if not is_doubles:
 		var opp_target: Vector3 = _get_opponent_assist_target()
-		opponent.position.x = move_toward(opponent.position.x, opp_target.x, OPPONENT_MOVE_SPEED * delta)
-		opponent.position.z = move_toward(opponent.position.z, opp_target.z, OPPONENT_MOVE_SPEED * delta)
+		var opp_speed: float = _get_inline_ai_move_speed()
+		opponent.position.x = move_toward(opponent.position.x, opp_target.x, opp_speed * delta)
+		opponent.position.z = move_toward(opponent.position.z, opp_target.z, opp_speed * delta)
 		opponent.position.x = clampf(opponent.position.x, -COURT_X_LIMIT, COURT_X_LIMIT)
 		opponent.position.z = clampf(opponent.position.z, OPPONENT_MIN_Z, OPPONENT_MAX_Z)
 
