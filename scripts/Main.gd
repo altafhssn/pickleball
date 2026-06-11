@@ -444,6 +444,9 @@ func _launch_committed_shot() -> void:
 	last_player_shot_type = shot_type
 	var emit_power: float = 1.0 - clampf(spread / 0.45, 0.0, 1.0) * 0.5
 	EventBus.ball_hit.emit(0, shot_type, emit_power)
+	# Impact juice — a beat of hit-stop + a camera punch on YOUR contact.
+	game_feel.hitstop(0.05)
+	game_feel.shake(0.035, 0.15)
 	match_manager.record_hit()
 
 # === COMMIT-AND-CONTACT (AI mirror) ===
@@ -1006,7 +1009,7 @@ func _animate_paddle_swing(character: Node3D) -> void:
 	if character.has_method("play_swing") and character.has_method("is_animated") and character.is_animated():
 		var facing_sign: float = 1.0 if character.global_position.z < 0.0 else -1.0
 		var side: float = (ball.position.x - character.global_position.x) * facing_sign
-		character.play_swing(side)
+		character.play_swing(side, CONTACT_DELAY)
 		return
 	# Placeholder fallback: rotate the box paddle.
 	var paddle = character.get_node("Paddle") if character.has_node("Paddle") else null

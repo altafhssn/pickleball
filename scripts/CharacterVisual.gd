@@ -94,9 +94,21 @@ func update_locomotion(local_dir: Vector3, speed: float) -> void:
 	else:
 		play("run_forward" if local_dir.z > 0.0 else "run_backward")
 
-# side > 0 → ball on character's right side.
-func play_smash(side: float) -> void:
-	_play_oneshot("smash_right" if side >= 0.0 else "smash_left")
+# side > 0 → ball on character's right side. contact_in = seconds until the
+# gameplay launches the ball; the clip speed is scaled so its bat-meets-ball
+# frame (~40% in) lands exactly on that moment.
+func play_smash(side: float, contact_in: float = 0.32) -> void:
+	if not is_ready:
+		return
+	var anim_name: String = "smash_right" if side >= 0.0 else "smash_left"
+	if not anim_player.has_animation(anim_name):
+		return
+	var clip: Animation = anim_player.get_animation(anim_name)
+	var speed: float = 1.0
+	if clip.length > 0.01 and contact_in > 0.01:
+		speed = clampf((clip.length * 0.40) / contact_in, 0.5, 3.0)
+	_oneshot_playing = anim_name
+	anim_player.play(anim_name, -1, speed)
 
 func play_victory() -> void:
 	_play_oneshot("victory")
@@ -185,12 +197,11 @@ func _collect_animations() -> void:
 		_remap_tracks_to_skeleton(anim, skel_path)
 		if clean_name in LOOPED_ANIMS:
 			anim.loop_mode = Animation.LOOP_LINEAR
-		else:
-			# One-shots (smash/victory/defeat): Mixamo bakes root motion into
-			# the hips. The lunge slides the character away from its gameplay
-			# position, then the blend back to idle snaps it home — reads as
-			# a flicker. Keep vertical hip motion (the squat), pin X/Z.
-			_strip_horizontal_root_motion(anim)
+		# ALL clips get horizontal root motion stripped (keep the vertical
+		# squat). Mixamo bakes travel into the hips — run clips translated
+		# the mesh metres away from its gameplay position mid-loop, which
+		# read as the character disappearing; the mover owns position.
+		_strip_horizontal_root_motion(anim)
 		if lib.has_animation(clean_name):
 			lib.remove_animation(clean_name)
 		lib.add_animation(clean_name, anim)

@@ -57,6 +57,16 @@ func _process(delta: float) -> void:
 		if flash_timer <= 0:
 			flash_node.color = Color(1, 1, 1, 0)
 
+# Hit-stop: freeze time for a beat on a strong contact. The classic
+# "you really hit that" feedback. duration is in real seconds.
+func hitstop(duration: float = 0.05, time_scale: float = 0.05) -> void:
+	if Engine.time_scale < 1.0:
+		return  # one at a time
+	Engine.time_scale = time_scale
+	# ignore_time_scale=true so the timer runs in real time while frozen.
+	var timer := get_tree().create_timer(duration, true, false, true)
+	timer.timeout.connect(func(): Engine.time_scale = 1.0)
+
 func shake(intensity: float, duration: float) -> void:
 	if not camera:
 		return

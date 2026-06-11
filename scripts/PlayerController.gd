@@ -85,10 +85,11 @@ func _update_locomotion(delta: float) -> void:
 
 # === ACTIONS ===
 
-# side > 0 → ball on the character's right.
-func play_swing(side: float = 1.0) -> void:
+# side > 0 → ball on the character's right. contact_in = seconds until the
+# ball launches, so the swing's contact frame syncs with it.
+func play_swing(side: float = 1.0, contact_in: float = 0.32) -> void:
 	if visual:
-		visual.play_smash(side)
+		visual.play_smash(side, contact_in)
 
 func celebrate() -> void:
 	if visual:
