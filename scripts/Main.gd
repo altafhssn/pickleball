@@ -69,6 +69,8 @@ var touch_move_dir: Vector2 = Vector2.ZERO
 # and rally share the Space key and we want both to edge-detect cleanly.
 var was_serve_space_pressed: bool = false
 var was_rally_space_pressed: bool = false
+var was_lob_key_pressed: bool = false
+var was_dink_key_pressed: bool = false
 # === COMMIT-AND-CONTACT SWING SYSTEM ===
 # The player commits to a shot type ANY time while the ball approaches.
 # The character auto-runs to the intercept; when the ball gets close the
@@ -96,7 +98,7 @@ const AI_REACTION_TIME: float = 0.25
 # Tighter than the player's reach — the AI has to actually be near the ball
 # to connect, so well-placed shots into the corners win the rally outright.
 const AI_HIT_RANGE: float = 1.20
-const AI_CONTACT_REACH: float = 1.45
+const AI_CONTACT_REACH: float = 1.70
 
 # Camera base (Main owns this; GameFeel adds a shake offset on top each frame).
 var camera_base_pos: Vector3 = Vector3.ZERO
@@ -123,6 +125,15 @@ const BALL_REST_TIMEOUT: float = 0.8
 const OUT_X_LIMIT: float = 1.70
 const OUT_Z_LIMIT: float = 2.55
 const FLOOR_Y_LIMIT: float = -0.3
+const PLAYER_MOVE_SPEED: float = 3.8
+const PLAYER_ASSIST_SPEED: float = 1.25
+const PLAYER_RETURN_SPEED: float = 1.6
+const OPPONENT_MOVE_SPEED: float = 2.35
+const COURT_X_LIMIT: float = 1.35
+const PLAYER_MIN_Z: float = -2.12
+const PLAYER_MAX_Z: float = -0.58
+const OPPONENT_MIN_Z: float = 0.72
+const OPPONENT_MAX_Z: float = 2.12
 
 func _ready():
 	EventBus.swipe_detected.connect(_on_swipe_detected)
@@ -261,7 +272,8 @@ func _on_tournament_play_round(_opponent_name: String, difficulty: int) -> void:
 	opponent.position = Vector3(0, 0, OPPONENT_BASELINE)
 	hud.update_score(0, 0)
 	hud.show_serve_indicator("Tournament match — " + _opponent_name)
-	_on_serve_ready(0, 0)
+	# (start_match already emitted serve_ready — no direct call, or the
+	# serve gets scheduled twice.)
 
 func _on_tournament_closed() -> void:
 	_remove_menu_name("Tournament")
@@ -309,13 +321,21 @@ func _process_serve_input(_delta: float) -> void:
 	was_serve_space_pressed = space_now
 
 func _process_rally_input() -> void:
-	# Space = commit a DRIVE. Commit is allowed any time the ball is heading
-	# our way — even while it's still on the AI's side. Earlier = better.
+	# Shot buttons commit intent, while movement stays independent.
+	# Space/tap = drive, W/double-tap = lob, S = dink.
 	var space_now: bool = Input.is_key_pressed(KEY_SPACE)
+	var lob_now: bool = Input.is_key_pressed(KEY_W)
+	var dink_now: bool = Input.is_key_pressed(KEY_S)
 	if not game_state.can_serve():
 		if space_now and not was_rally_space_pressed:
 			_commit_shot(BallRef.ShotType.DRIVE)
+		if lob_now and not was_lob_key_pressed:
+			_commit_shot(BallRef.ShotType.LOB)
+		if dink_now and not was_dink_key_pressed:
+			_commit_shot(BallRef.ShotType.DINK)
 	was_rally_space_pressed = space_now
+	was_lob_key_pressed = lob_now
+	was_dink_key_pressed = dink_now
 
 # === COMMIT-AND-CONTACT (player) ===
 
@@ -350,22 +370,25 @@ func _process_commit_swing(delta: float) -> void:
 		player_swung_this_approach = false
 		return
 
-	# Mid-swing: count down to the bat-meets-ball moment.
+	# Mid-swing: count down to the bat-meets-ball moment. The two-bounce
+	# rule gates only the CONTACT — if the required bounce hasn't landed
+	# yet, the contact holds until it does (mirrors the AI's swing).
 	if swing_in_progress:
 		swing_contact_timer -= delta
 		if swing_contact_timer <= 0.0:
+			if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
+				swing_contact_timer = 0.05
+				return
 			swing_in_progress = false
 			_launch_committed_shot()
 		return
 
 	if pending_shot == -1 or player_swung_this_approach:
 		return
-	# Trigger conditions: ball solidly on our side, required bounce done,
-	# within swing-trigger range of the character.
+	# Trigger conditions: ball solidly on our side, within swing-trigger
+	# range of the character (windup may start before the bounce).
 	if ball.position.z > -0.1:
 		return
-	if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
-		return  # two-bounce rule: wait for it to land first
 	var dist: float = Vector2(player.position.x - ball.position.x, player.position.z - ball.position.z).length()
 	if dist <= SWING_TRIGGER_RANGE:
 		swing_in_progress = true
@@ -383,32 +406,38 @@ func _launch_committed_shot() -> void:
 	if dist > CONTACT_REACH or ball.position.z > -0.05:
 		hud.show_message("Missed!", Color(1, 0.4, 0.4))
 		return
-	# Quality from commit earliness: deciding early = a composed shot.
+	# Quality is mostly body position at contact, with early intent as a
+	# small stabilizer. This makes footwork matter and cuts down on random
+	# haphazard placement.
 	var early_sec: float = float(Time.get_ticks_msec() - commit_time_ms) / 1000.0
 	var spread: float
-	if early_sec >= 0.9:
-		hud.show_message("✦ PERFECT! ✦", Color(0.2, 1.0, 0.4))
-		spread = 0.10
-	elif early_sec >= 0.45:
+	if dist <= PERFECT_DIST:
+		hud.show_message("CLEAN!", Color(0.2, 1.0, 0.4))
+		spread = 0.08
+	elif dist <= GOOD_DIST:
 		hud.show_message("GOOD!", Color(1.0, 0.95, 0.2))
-		spread = 0.25
+		spread = 0.18
 	else:
-		hud.show_message("OK", Color(1.0, 0.6, 0.2))
-		spread = 0.45
-	# Smart aim: place away from where the opponent is standing.
-	var away_x: float = clampf(-opponent.position.x * 1.2, -1.1, 1.1)
-	var target_x: float = clampf(away_x + randf_range(-spread, spread), -1.2, 1.2)
+		hud.show_message("REACH", Color(1.0, 0.6, 0.2))
+		spread = 0.34
+	if early_sec >= 0.55:
+		spread *= 0.75
+
+	var move_input: Vector2 = _get_player_move_input()
+	var aim_x: float = move_input.x * 0.35
+	var away_x: float = clampf(-opponent.position.x * 0.65, -0.85, 0.85)
+	var target_x: float = clampf(away_x + aim_x + randf_range(-spread, spread), -1.15, 1.15)
 	var target_z: float
 	var flight_time: float
 	match shot_type:
 		BallRef.ShotType.LOB:
-			target_z = OPPONENT_BASELINE - randf_range(0.3, 0.55)
+			target_z = OPPONENT_BASELINE - randf_range(0.12, 0.38)
 			flight_time = 1.10
 		BallRef.ShotType.DINK:
-			target_z = randf_range(0.4, 0.85)
+			target_z = randf_range(0.38, 0.70)
 			flight_time = 0.90
 		_:
-			target_z = OPPONENT_BASELINE - randf_range(0.6, 1.0)
+			target_z = OPPONENT_BASELINE - randf_range(0.48, 0.82)
 			flight_time = 0.70
 	ball.launch_at_target(ball.position, Vector3(target_x, 0, target_z), flight_time)
 	ball.last_hitter_id = 0
@@ -421,31 +450,32 @@ func _launch_committed_shot() -> void:
 # Two-phase like the player: reaction → windup (swing anim plays) →
 # contact (ball launches), so the bat visually meets the ball.
 func _process_ai_swing(delta: float) -> void:
-	# When the ball is back on the player's side, reset everything.
-	if ball.position.z < 0:
+	# The ball is "the AI's problem" whenever the player hit it last —
+	# reaction starts at the player's hit, not at the net crossing. (The
+	# playtest showed net-crossing-gated reactions finish ~0.1s after the
+	# second bounce, every time: the AI could never legally swing.)
+	if not (rally_active and ball.is_in_play) or ball.last_hitter_id != 0:
 		ai_ready_to_swing = false
 		ai_swing_timer = 0.0
 		ai_winding_up = false
 		ai_contact_timer = 0.0
 		ai_just_swung = false
 		return
-	if not (rally_active and ball.is_in_play):
-		ai_ready_to_swing = false
-		ai_swing_timer = 0.0
-		ai_winding_up = false
-		return
 	# Don't re-hit a ball we just sent away.
 	if ai_just_swung:
 		return
-	# Two-bounce rule, same gate as the player: until both the serve and
-	# the return have bounced, every hit must follow a bounce.
-	if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
-		return
 
 	# Windup phase: swing anim already playing; launch at the contact moment.
+	# The two-bounce rule gates only the CONTACT, not the windup — the AI
+	# reads the ball in flight like a real player and swings through right
+	# after the bounce. (Gating the whole pipeline on the bounce left only
+	# 0.4s to react+windup; every rally died at 1 hit.)
 	if ai_winding_up:
 		ai_contact_timer -= delta
 		if ai_contact_timer <= 0.0:
+			if total_bounces_in_rally < 2 and bounces_since_last_hit < 1:
+				ai_contact_timer = 0.05  # hold the contact until the bounce lands
+				return
 			ai_winding_up = false
 			var dist_now: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
 			if dist_now <= AI_CONTACT_REACH:
@@ -463,22 +493,54 @@ func _process_ai_swing(delta: float) -> void:
 			ai_contact_timer = CONTACT_DELAY
 			_animate_paddle_swing(opponent)
 		return
-	var dist: float = Vector2(opponent.position.x - ball.position.x, opponent.position.z - ball.position.z).length()
-	if dist <= AI_HIT_RANGE + 0.4:
-		ai_ready_to_swing = true
-		ai_swing_timer = AI_REACTION_TIME
+	# Arm immediately at the player's hit — reaction + windup overlap the
+	# ball's whole flight; the contact gate above waits for the bounce.
+	ai_ready_to_swing = true
+	ai_swing_timer = _get_inline_ai_reaction_time()
 
 func _ai_launch() -> void:
 	if not rally_active or not ball.is_in_play:
 		return
-	var target_x: float = clampf(-ball.position.x * 0.5 + randf_range(-0.45, 0.45), -1.2, 1.2)
-	var target_z: float = PLAYER_BASELINE + randf_range(0.4, 1.0)
+	var spread: float = _get_inline_ai_spread()
+	var target_x: float = clampf(player.position.x + randf_range(-spread, spread), -1.05, 1.05)
+	var target_z: float = clampf(player.position.z + randf_range(0.35, 0.82), PLAYER_MIN_Z + 0.20, PLAYER_MAX_Z - 0.05)
 	var target := Vector3(target_x, 0, target_z)
-	# AI uses a flat DRIVE-style trajectory most of the time.
-	ball.launch_at_target(ball.position, target, 0.85)
+	ball.launch_at_target(ball.position, target, 0.90)
 	ball.last_hitter_id = 1
 	EventBus.ball_hit.emit(1, BallRef.ShotType.DRIVE, 0.75)
 	match_manager.record_hit()
+
+func _get_inline_ai_reaction_time() -> float:
+	var difficulty: int = int(ai_manager.get("difficulty"))
+	match difficulty:
+		AIManagerRef.Difficulty.BEGINNER:
+			return 0.52
+		AIManagerRef.Difficulty.CASUAL:
+			return 0.42
+		AIManagerRef.Difficulty.PRO:
+			return 0.32
+		AIManagerRef.Difficulty.ELITE:
+			return 0.25
+		AIManagerRef.Difficulty.CHAMPION:
+			return 0.20
+		_:
+			return AI_REACTION_TIME
+
+func _get_inline_ai_spread() -> float:
+	var difficulty: int = int(ai_manager.get("difficulty"))
+	match difficulty:
+		AIManagerRef.Difficulty.BEGINNER:
+			return 0.42
+		AIManagerRef.Difficulty.CASUAL:
+			return 0.32
+		AIManagerRef.Difficulty.PRO:
+			return 0.24
+		AIManagerRef.Difficulty.ELITE:
+			return 0.18
+		AIManagerRef.Difficulty.CHAMPION:
+			return 0.13
+		_:
+			return 0.32
 
 func _launch_player_serve(power: float) -> void:
 	if not player_serve_ready:
@@ -486,9 +548,9 @@ func _launch_player_serve(power: float) -> void:
 	player_serve_ready = false
 	game_state.transition_to(GameStateRef.State.SERVE_ACTIVE)
 
-	# Wii-Sports serve: fixed target in the middle of the opponent's
-	# mid-court with a small random nudge.
-	var target := Vector3(randf_range(-0.5, 0.5), 0, 1.1)
+	# Wii-Sports serve: deep target past the opponent's kitchen with a
+	# small random nudge, giving them a real return window.
+	var target := Vector3(randf_range(-0.5, 0.5), 0, 1.3)
 	ball.serve(ball.position, target, power)
 	ball.last_hitter_id = 0
 	_animate_paddle_swing(player)
@@ -530,6 +592,14 @@ func _spawn_touch_controls() -> void:
 	touch_btn_left  = _make_percent_button("◀", 0.02, 0.70, 0.10, 0.80, 44, Color(0.1, 0.1, 0.15, 0.9))
 	touch_btn_right = _make_percent_button("▶", 0.14, 0.70, 0.22, 0.80, 44, Color(0.1, 0.1, 0.15, 0.9))
 	touch_btn_down  = _make_percent_button("▼", 0.08, 0.82, 0.16, 0.92, 44, Color(0.1, 0.1, 0.15, 0.9))
+	touch_btn_up.button_down.connect(_on_touch_move.bind(Vector2(0, 1)))
+	touch_btn_up.button_up.connect(_on_touch_move.bind(Vector2.ZERO))
+	touch_btn_down.button_down.connect(_on_touch_move.bind(Vector2(0, -1)))
+	touch_btn_down.button_up.connect(_on_touch_move.bind(Vector2.ZERO))
+	touch_btn_left.button_down.connect(_on_touch_move.bind(Vector2(-1, 0)))
+	touch_btn_left.button_up.connect(_on_touch_move.bind(Vector2.ZERO))
+	touch_btn_right.button_down.connect(_on_touch_move.bind(Vector2(1, 0)))
+	touch_btn_right.button_up.connect(_on_touch_move.bind(Vector2.ZERO))
 
 # Place a button using percentage-of-viewport anchors.
 # x/y ranges should be in [0, 1]. Resulting rect fits regardless of aspect.
@@ -781,57 +851,84 @@ func _process(delta: float) -> void:
 	_update_characters_look_at_ball()
 
 func _update_player_auto_move(delta: float) -> void:
-	# Don't move anyone while waiting on a serve — the serve setup placed
-	# them in the correct service court and we shouldn't pull them back to
-	# center until the ball is in play.
+	# Player movement should feel owned by the player. We only add a small
+	# assist when they are idle or the ball is close enough that footwork
+	# should naturally shade toward contact.
 	if not ball.is_in_play:
 		return
 
-	var player_target_z = PLAYER_BASELINE
-	var opp_target_z = OPPONENT_BASELINE
-	var player_target_x = 0.0
-	var opp_target_x = 0.0
+	var move_input: Vector2 = _get_player_move_input()
+	if move_input.length_squared() > 1.0:
+		move_input = move_input.normalized()
 
-	if ball.is_in_play:
-		# Wii-Sports auto-positioning: whoever's side the ball is on runs to
-		# meet it at its predicted landing. The other side drifts back to
-		# their baseline with a slight lateral lean while they wait.
-		var landing: Vector3 = _predict_ball_landing()
-		if is_doubles:
-			# Doubles still uses the old simple zone coverage.
-			if ball.position.z < 0 and ball.position.x < 0:
-				player_target_z = PLAYER_BASELINE
-				player_target_x = clampf(ball.position.x, -0.5, 0.0)
-			elif ball.position.z > 0 and ball.position.x < 0:
-				opp_target_z = OPPONENT_BASELINE
-				opp_target_x = clampf(ball.position.x, -0.5, 0.0)
-		else:
-			if ball.position.z < 0:
-				# Ball is coming to the player — auto-run there.
-				var plx: float = landing.x if landing.z < -0.05 else ball.position.x
-				var plz: float = landing.z if landing.z < -0.05 else ball.position.z
-				player_target_x = clampf(plx, -1.4, 1.4)
-				player_target_z = clampf(plz + 0.15, -2.1, -0.85)
-				opp_target_x = clampf(ball.position.x * 0.3, -0.6, 0.6)
-				opp_target_z = OPPONENT_BASELINE
-			else:
-				# Ball heading to the AI — AI runs there, player drifts back.
-				var olx: float = landing.x if landing.z > 0.05 else ball.position.x
-				var olz: float = landing.z if landing.z > 0.05 else ball.position.z
-				opp_target_x = clampf(olx, -1.4, 1.4)
-				opp_target_z = clampf(olz - 0.15, 0.85, 2.1)
-				player_target_x = clampf(ball.position.x * 0.3, -0.6, 0.6)
-				player_target_z = PLAYER_BASELINE
+	if move_input.length_squared() > 0.01:
+		player.position.x += move_input.x * PLAYER_MOVE_SPEED * delta
+		player.position.z += move_input.y * PLAYER_MOVE_SPEED * delta
+	else:
+		var idle_target: Vector3 = _get_player_assist_target()
+		var assist_speed: float = PLAYER_ASSIST_SPEED
+		if ball.position.z >= 0.0:
+			assist_speed = PLAYER_RETURN_SPEED
+		_move_player_toward(idle_target, assist_speed * delta)
 
-	# Move rate per second. Sport-pacing — characters jog to the ball
-	# without snapping. About a quarter court per second.
-	var move_rate: float = delta * 2.5
-	player.position.x = move_toward(player.position.x, player_target_x, move_rate)
-	player.position.z = move_toward(player.position.z, player_target_z, move_rate)
+	player.position.x = clampf(player.position.x, -COURT_X_LIMIT, COURT_X_LIMIT)
+	player.position.z = clampf(player.position.z, PLAYER_MIN_Z, PLAYER_MAX_Z)
 
 	if not is_doubles:
-		opponent.position.x = move_toward(opponent.position.x, opp_target_x, move_rate)
-		opponent.position.z = move_toward(opponent.position.z, opp_target_z, move_rate)
+		var opp_target: Vector3 = _get_opponent_assist_target()
+		opponent.position.x = move_toward(opponent.position.x, opp_target.x, OPPONENT_MOVE_SPEED * delta)
+		opponent.position.z = move_toward(opponent.position.z, opp_target.z, OPPONENT_MOVE_SPEED * delta)
+		opponent.position.x = clampf(opponent.position.x, -COURT_X_LIMIT, COURT_X_LIMIT)
+		opponent.position.z = clampf(opponent.position.z, OPPONENT_MIN_Z, OPPONENT_MAX_Z)
+
+func _get_player_move_input() -> Vector2:
+	var input := Vector2.ZERO
+	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+		input.x -= 1.0
+	if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+		input.x += 1.0
+	if Input.is_key_pressed(KEY_UP):
+		input.y += 1.0
+	if Input.is_key_pressed(KEY_DOWN):
+		input.y -= 1.0
+	input += touch_move_dir
+	return input
+
+func _move_player_toward(target: Vector3, amount: float) -> void:
+	player.position.x = move_toward(player.position.x, target.x, amount)
+	player.position.z = move_toward(player.position.z, target.z, amount)
+
+func _get_player_assist_target() -> Vector3:
+	if ball.position.z < 0.0:
+		var landing: Vector3 = _predict_ball_landing()
+		var target_x: float = landing.x if landing.z < -0.05 else ball.position.x
+		var target_z: float = landing.z if landing.z < -0.05 else ball.position.z
+		return Vector3(
+			clampf(target_x, -COURT_X_LIMIT, COURT_X_LIMIT),
+			0.0,
+			clampf(target_z + 0.12, PLAYER_MIN_Z, PLAYER_MAX_Z)
+		)
+	return Vector3(
+		clampf(ball.position.x * 0.22, -0.45, 0.45),
+		0.0,
+		PLAYER_BASELINE
+	)
+
+func _get_opponent_assist_target() -> Vector3:
+	if ball.position.z > 0.0:
+		var landing: Vector3 = _predict_ball_landing()
+		var target_x: float = landing.x if landing.z > 0.05 else ball.position.x
+		var target_z: float = landing.z if landing.z > 0.05 else ball.position.z
+		return Vector3(
+			clampf(target_x, -COURT_X_LIMIT, COURT_X_LIMIT),
+			0.0,
+			clampf(target_z - 0.12, OPPONENT_MIN_Z, OPPONENT_MAX_Z)
+		)
+	return Vector3(
+		clampf(ball.position.x * 0.20, -0.45, 0.45),
+		0.0,
+		OPPONENT_BASELINE
+	)
 
 # Ballistic projection ignoring drag — close enough for AI positioning.
 # Solves y(t) = pos.y + vel.y*t - 0.5*g*t² = 0 for t > 0.
@@ -1012,8 +1109,8 @@ func _reset_for_doubles_ai_serve(server_pos: int) -> void:
 		_doubles_ai_serve(server_pos)
 
 func _ai_serve() -> void:
-	# Center-ish target on the player's side, past their kitchen line.
-	var target = Vector3(randf_range(-0.5, 0.5), 0, PLAYER_BASELINE + 0.45)
+	# Deep-ish target on the player's side, well past their kitchen line.
+	var target = Vector3(randf_range(-0.5, 0.5), 0, PLAYER_BASELINE + 0.65)
 	ball.serve(ball.position, target, 0.55)
 	ball.last_hitter_id = 1
 	_animate_paddle_swing(opponent)
@@ -1495,10 +1592,15 @@ func _reset_rally() -> void:
 	player_swung_this_approach = false
 	was_serve_space_pressed = false
 	was_rally_space_pressed = false
+	was_lob_key_pressed = false
+	was_dink_key_pressed = false
+	touch_move_dir = Vector2.ZERO
 	match_manager.reset_rally()
 	ai_manager.reset()
 	ball.reset()
-	ball.position = Vector3(0, 0.05, 0)
+	# Park away from the net — the net's collision group works now, and a
+	# ball resting against it would ding the net SFX every rally reset.
+	ball.position = Vector3(0, 0.05, -1.0)
 
 # === PUBLIC API ===
 
@@ -1511,8 +1613,7 @@ func start_quick_match() -> void:
 	player.position = Vector3(0, 0, PLAYER_BASELINE)
 	opponent.position = Vector3(0, 0, OPPONENT_BASELINE)
 	hud.update_score(0, 0)
-	hud.show_serve_indicator("Starting match...")
-	_on_serve_ready(0, 0)
+	# (start_match already emitted serve_ready, which set the serve prompt.)
 
 func start_doubles_match() -> void:
 	_show_doubles_characters()
@@ -1531,4 +1632,4 @@ func start_doubles_match() -> void:
 	
 	hud.update_score(0, 0)
 	hud.show_serve_indicator("Starting doubles match...")
-	_on_doubles_serve_ready(0, 0, 0)
+	# (start_doubles_match already emitted serve_ready.)

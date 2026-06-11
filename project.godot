@@ -23,6 +23,7 @@ EventBus="*res://scripts/EventBus.gd"
 AudioManager="*res://scripts/AudioManager.gd"
 PlayerData="*res://scripts/PlayerData.gd"
 ScreenTransition="*res://scenes/UI/ScreenTransition.tscn"
+AutoPlayBot="*res://scripts/AutoPlayBot.gd"
 
 [display]
 
@@ -30,8 +31,6 @@ window/size/viewport_width=1920
 window/size/viewport_height=1080
 window/size/mode=2
 window/stretch/mode="canvas_items"
-window/stretch/aspect="keep"
-window/handheld/orientation=0
 
 [dotnet]
 
@@ -55,7 +54,7 @@ limits/multimesh/allocate_instances_per_frame=500
 
 [physics]
 
-3d/run_on_separate_thread=true
+3d/run_on_separate_thread=false
 
 [rendering]
 

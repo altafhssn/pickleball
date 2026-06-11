@@ -119,10 +119,13 @@ func _award_point(scorer_id: int, reason: String = "") -> void:
 			_end_match(scorer_id)
 			return
 
-	# Winner of the rally serves next, from center.
+	# Winner of the rally serves next, from center. NOTE: deliberately no
+	# _prepare_serve() here — Main._on_point_awarded owns the next-serve
+	# flow (after its 1.5s banner delay). Emitting serve_ready here too
+	# caused a double-scheduled serve: the AI would serve, then 1.5s later
+	# the ball teleported back and served again.
 	current_server = scorer_id
 	current_serve_side = 0
-	_prepare_serve()
 
 func _end_match(winner: int) -> void:
 	match_complete = true

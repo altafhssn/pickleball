@@ -16,7 +16,10 @@ enum ShotType { DINK, DRIVE, LOB, VOLLEY, ERNE, ATP }
 # With mass 0.5 and these constants, a 5 m/s shot loses ~0.5 m/s over a
 # typical 0.5s flight, which feels right without breaking the projectile
 # math used by Ball.serve().
-@export var drag_coefficient: float = 0.02
+# Near-zero: launch_at_target's projectile math promises an exact landing
+# spot, and drag was making every shot fall ~15% short (serves died in the
+# kitchen before the AI could reach them). Kept tiny for a hint of float.
+@export var drag_coefficient: float = 0.005
 @export var linear_drag: float = 0.0
 # Ball stops when it's basically at rest on the floor — avoids endless
 # micro-bouncing after a dink lands.
@@ -82,14 +85,17 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		state.linear_velocity = dir * max_speed
 
 func _on_body_entered(body: Node) -> void:
-	# Detect net hits
-	if body.is_in_group("net"):
+	# Group check with a name-based fallback: a hand-edited .tscn once
+	# silently lost the group tags (Godot needs groups=[&"name"] syntax)
+	# and the whole rules system starved of bounce events. Never again.
+	var bname: String = body.name.to_lower()
+	if body.is_in_group("net") or bname.contains("net"):
 		ball_hit_net.emit()
 		EventBus.ball_net_hit.emit()
 		is_in_play = false
 	
-	# Detect ground/floor bounces
-	if body.is_in_group("court_floor"):
+	# Detect ground/floor bounces (same name fallback as above)
+	if body.is_in_group("court_floor") or bname.contains("floor"):
 		has_bounced_this_side = true
 		var side: int = 0 if global_position.z < 0 else 1
 		ball_landed.emit(global_position, side)
@@ -103,8 +109,12 @@ func _on_body_entered(body: Node) -> void:
 		call_deferred("_ensure_visible_bounce")
 
 func _ensure_visible_bounce() -> void:
-	const MIN_BOUNCE_VY: float = 0.4
-	const HORIZ_THRESHOLD: float = 1.5
+	# A healthy first bounce keeps the ball alive long enough for the
+	# receiving side's swing windup — vy=1.8 gives ~0.37s of hang time
+	# (apex ≈ 0.17m). The playtest bot showed 0.4s inter-bounce gaps were
+	# killing every rally at 1 hit.
+	const MIN_BOUNCE_VY: float = 1.8
+	const HORIZ_THRESHOLD: float = 0.5
 	var horiz_speed: float = Vector2(linear_velocity.x, linear_velocity.z).length()
 	if linear_velocity.y >= 0.0 and linear_velocity.y < MIN_BOUNCE_VY and horiz_speed > HORIZ_THRESHOLD:
 		linear_velocity.y = MIN_BOUNCE_VY

@@ -20,6 +20,8 @@ size = Vector3(0.04, 0.08, 0.005)
 albedo_color = Color(0.8, 0.3, 0.1, 1)
 
 [node name="PlayerPartner" type="CharacterBody3D"]
+collision_layer = 2
+collision_mask = 1
 script = ExtResource("1_xf2a7")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
